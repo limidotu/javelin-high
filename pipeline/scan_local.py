@@ -14,22 +14,27 @@ from google.genai import types
 from gemini_defaults import SCAN_MODEL, VERTEX_LOCATION, VERTEX_PROJECT
 from media import assert_inline_ok, make_scan_proxy, probe_secs
 from scan_io import (
+    SEGMENT_S,
     WINDOW_S,
     clock,
     existing_spans,
-    is_deadline,
+    scan_ladder_rows,
     is_rate_limit,
     normalize_rows,
+    run_with_retries,
     uncovered_windows,
     write_payload,
 )
 
 ROOT = Path(__file__).resolve().parent
 MODEL = SCAN_MODEL
-HTTP_TIMEOUT_MS = 60_000
+HTTP_TIMEOUT_MS = 180_000
 MAX_429_STREAK = 3
-PROMPT = """
-Amateur indoor volleyball. Pick THE BEST highlight moments only.
+WINDOW_TRIES = 3
+RETRY_SLEEP_S = 8.0
+PROMPT_BODY = """
+Amateur indoor volleyball. This clip is about {span_s} seconds.
+Pick THE BEST highlight moments only.
 
 KEEP only elite plays: stuff blocks, powerful kills that land, diving digs
 that save a point, then a kill, clean aces nobody touches. Both teams.
@@ -39,11 +44,85 @@ funny misses, net luck, dead time, and anything you would skip on a recap.
 
 Return JSON only: a list of objects with keys
 start,end,score,event,team_side,reason.
-Times are MM:SS relative to THIS window, not the full match.
-score is 0-10. Use 8, 9, or 10 only for a keep. Prefer 2 to 5 items.
-team_side is left or right. Pad each rally about 6 to 10 seconds.
-If this window has no elite play, return [].
+Times are MM:SS relative to THIS clip, not the full match.
+score is 0-10. Use 8, 9, or 10 only for a keep. {prefer}
+If this clip has no elite play, return [].
 """.strip()
+
+
+def scan_prompt(span_s: int) -> str:
+    if span_s <= 90:
+        prefer = "Prefer 0 or 1 item."
+    elif span_s <= 360:
+        prefer = "Prefer 0 to 4 items."
+    else:
+        prefer = "Prefer 0 to 8 items."
+    return PROMPT_BODY.format(span_s=max(1, int(span_s)), prefer=prefer)
+
+
+def span_timeout_ms(span_s: int) -> int:
+    if span_s <= SEGMENT_S:
+        return HTTP_TIMEOUT_MS
+    if span_s <= 360:
+        return 240_000
+    return 300_000
+
+
+def _parse_model_json(text: str) -> object:
+    raw = (text or "").strip()
+    try:
+        return json.loads(raw or "[]")
+    except json.JSONDecodeError:
+        return []
+
+
+def scan_span(
+    client: genai.Client,
+    source: Path,
+    start_s: int,
+    end_s: int,
+    proxy_dir: Path,
+    video_end: int,
+    *,
+    window_start: int,
+    window_end: int,
+) -> list[dict]:
+    dest = proxy_dir / f"w_{window_start}_{window_end}_{start_s}_{end_s}.mp4"
+    print(f"  proxy {start_s}-{end_s} ...", flush=True)
+    make_scan_proxy(source, start_s, end_s, dest)
+    assert_inline_ok(dest)
+    video = types.Part.from_bytes(data=dest.read_bytes(), mime_type="video/mp4")
+    t0 = time.time()
+    print(f"  call {start_s}-{end_s} ...", flush=True)
+    timeout_ms = span_timeout_ms(end_s - start_s)
+    prompt = scan_prompt(end_s - start_s)
+
+    def _run():
+        return client.models.generate_content(
+            model=MODEL,
+            contents=[video, prompt],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                    disable=True
+                ),
+                http_options=types.HttpOptions(timeout=timeout_ms),
+            ),
+        )
+
+    pool = ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(_run)
+    try:
+        response = future.result(timeout=timeout_ms / 1000.0)
+    except FuturesTimeout as exc:
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise TimeoutError(f"local timeout {start_s}-{end_s}") from exc
+    else:
+        pool.shutdown(wait=True, cancel_futures=False)
+    elapsed = round(time.time() - t0, 1)
+    print(f"  ok {start_s}-{end_s} {elapsed}s", flush=True)
+    parsed = _parse_model_json(response.text or "[]")
+    return normalize_rows(parsed, start_s, end_s, video_end=video_end)
 
 
 def scan_window_file(
@@ -54,46 +133,34 @@ def scan_window_file(
     proxy_dir: Path,
     video_end: int,
 ) -> dict:
-    proxy = proxy_dir / f"w_{start_s}_{end_s}.mp4"
-    print(f"  proxy {start_s}-{end_s} ...", flush=True)
-    make_scan_proxy(source, start_s, end_s, proxy)
-    assert_inline_ok(proxy)
-    video = types.Part.from_bytes(data=proxy.read_bytes(), mime_type="video/mp4")
+    print(f"  window {start_s}-{end_s} try {end_s - start_s}s", flush=True)
     t0 = time.time()
-    print(f"  call {start_s}-{end_s} ...", flush=True)
 
-    def _run():
-        return client.models.generate_content(
-            model=MODEL,
-            contents=[video, PROMPT],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                    disable=True
-                ),
-                thinking_config=types.ThinkingConfig(thinking_level="LOW"),
-                http_options=types.HttpOptions(timeout=HTTP_TIMEOUT_MS),
+    def attempt(a: int, b: int) -> list[dict]:
+        tries = WINDOW_TRIES if (b - a) <= SEGMENT_S else 1
+        if (a, b) != (start_s, end_s):
+            print(f"  split to {a}-{b} ({b - a}s)", flush=True)
+        return run_with_retries(
+            lambda: scan_span(
+                client,
+                source,
+                a,
+                b,
+                proxy_dir,
+                video_end,
+                window_start=start_s,
+                window_end=end_s,
             ),
+            tries=tries,
+            sleep_s=RETRY_SLEEP_S,
         )
 
-    pool = ThreadPoolExecutor(max_workers=1)
-    future = pool.submit(_run)
-    try:
-        response = future.result(timeout=HTTP_TIMEOUT_MS / 1000.0)
-    except FuturesTimeout as exc:
-        pool.shutdown(wait=False, cancel_futures=True)
-        raise TimeoutError(f"local timeout {start_s}-{end_s}") from exc
-    else:
-        pool.shutdown(wait=True, cancel_futures=False)
+    rows = scan_ladder_rows(start_s, end_s, attempt)
     elapsed = round(time.time() - t0, 1)
-    print(f"  ok {start_s}-{end_s} {elapsed}s", flush=True)
-    text = response.text or "[]"
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        parsed = []
-    rows = normalize_rows(parsed, start_s, end_s, video_end=video_end)
-    usage = getattr(response, "usage_metadata", None)
+    print(
+        f"  ok window {start_s}-{end_s} {elapsed}s keeps={sum(1 for h in rows if h.get('keep'))}",
+        flush=True,
+    )
     return {
         "model": MODEL,
         "backend": "vertex-ai",
@@ -106,11 +173,11 @@ def scan_window_file(
             "label": f"{clock(start_s)}-{clock(end_s)}",
         },
         "elapsed_s": elapsed,
-        "prompt_token_count": getattr(usage, "prompt_token_count", None),
-        "candidates_token_count": getattr(usage, "candidates_token_count", None),
-        "thoughts_token_count": getattr(usage, "thoughts_token_count", None),
-        "total_token_count": getattr(usage, "total_token_count", None),
-        "timestamp_note": "Times in start/end are window-relative. source_* is match time.",
+        "prompt_token_count": None,
+        "candidates_token_count": None,
+        "thoughts_token_count": None,
+        "total_token_count": None,
+        "timestamp_note": "Times in start/end are clip-relative. source_* is match time.",
         "highlights": rows,
         "partial_ok": True,
     }
@@ -125,14 +192,18 @@ def scan_range_file(
     video_end: int,
 ) -> list[dict]:
     try:
-        return [scan_window_file(client, source, start_s, end_s, proxy_dir, video_end)]
+        return [
+            scan_window_file(
+                client, source, start_s, end_s, proxy_dir, video_end
+            )
+        ]
     except Exception as exc:
         if is_rate_limit(exc):
             raise
-        if is_deadline(exc):
-            print(f"  skip {start_s}-{end_s} deadline", flush=True)
-            return []
-        raise
+        if isinstance(exc, FileNotFoundError):
+            raise
+        print(f"  skip {start_s}-{end_s} {exc}", flush=True)
+        return []
 
 
 def scan_local(
@@ -175,13 +246,12 @@ def scan_local(
                     print("PARTIAL too many 429s; keep finished windows", flush=True)
                     break
                 continue
-            if is_deadline(exc):
-                partial = True
-                print(f"  skip {start_s}-{end_s} deadline", flush=True)
-                continue
-            print(f"FAIL {start_s}s-{end_s}s {exc}", file=sys.stderr, flush=True)
+            print(f"  skip {start_s}-{end_s} {exc}", flush=True)
             partial = True
-            break
+            continue
+        if not payloads:
+            partial = True
+            continue
         streak_429 = 0
         for payload in payloads:
             total_keep += write_payload(payload, out_dir)

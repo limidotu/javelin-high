@@ -8,8 +8,8 @@ PREFER_DUR = 15.0
 CONTACT_AT = 0.58
 REVIEW_DUR = 20.0
 COOL_WATCH_DUR = 40.0
-MIN_CLIP_DUR = 10.0
-MAX_CLIP_DUR = 20.0
+MIN_CLIP_DUR = 12.0
+MAX_CLIP_DUR = 18.0
 MAX_COOL_DUR = 40.0
 COOL_SCAN_SCORE = 9
 DEFAULT_CLIP_DUR = 15.0
@@ -78,7 +78,7 @@ def max_clip_dur(scan_score: int) -> float:
 
 
 def one_cool_caps(rows: list[dict]) -> list[float]:
-    """At most one clip may exceed 20 s. Pick the longest high-score trim."""
+    """At most one clip may exceed 18 s. Pick the longest high-score trim."""
     n = len(rows)
     caps = [MAX_CLIP_DUR] * n
     winner: int | None = None
@@ -147,7 +147,7 @@ def clamp_trim(
     min_s: float = MIN_CLIP_DUR,
     max_s: float = MAX_CLIP_DUR,
 ) -> tuple[float, float]:
-    """Keep a 10-20 s span, or up to 40 s when max_s allows."""
+    """Keep a 12-18 s span, or up to 40 s when max_s allows."""
     window_s = max(0.0, window_s)
     if rel_b < rel_a:
         rel_a, rel_b = rel_b, rel_a

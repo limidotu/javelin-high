@@ -6,6 +6,7 @@ __pycache__/
 venv/
 *.pyc
 .DS_Store
+pipeline/generations/
 pipeline/gen_*/
 pipeline/scan/
 pipeline/scan_local/

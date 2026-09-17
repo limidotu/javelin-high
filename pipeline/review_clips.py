@@ -12,15 +12,18 @@ from google import genai
 from google.genai import types
 
 from clip_window import REVIEW_DUR, default_trim, trim_from_row
-from gemini_defaults import REVIEW_MODEL, VERTEX_LOCATION, VERTEX_PROJECT
+from gemini_defaults import REVIEW_MODEL, REVIEW_THINKING_LEVEL, VERTEX_LOCATION, VERTEX_PROJECT
 from media import assert_inline_ok, make_review_proxy
-from scan_io import is_deadline, is_rate_limit
-from pick import REVIEW_BATCH, batches, pick_reel
+from scan_io import is_rate_limit, run_with_retries, should_split_span
+from pick import REVIEW_BATCH, batches, child_review_groups, pick_reel
 
 ROOT = Path(__file__).resolve().parent
 MODEL = REVIEW_MODEL
-HTTP_TIMEOUT_MS = 180_000
+HTTP_TIMEOUT_MS = 300_000
 MAX_429_STREAK = 3
+BATCH_TRIES = 3
+RETRY_SLEEP_S = 8.0
+REVIEW_429_SLEEP_S = 45.0
 
 PROMPT = """
 Amateur indoor volleyball. You rank highlight clips.
@@ -30,18 +33,19 @@ Each clip is 20 seconds. Extra time is before the finish. Score the best
 play in the clip, not the pad.
 
 Set start and end in THIS clip, in seconds from 0 to 20.
-Normal span is 10 to 20 seconds. End on a dead ball (point over).
+Ideal span is 15 seconds. 12 to 18 is OK. Do not stretch to 20 seconds
+to include walking or dead time. End on a dead ball (point over).
 Do not end on a diving dig that keeps the ball alive. Cut walking.
 
-KEEP a clip if it shows an elite play: stuff block, powerful kill that lands,
-diving dig that saves a point, then a kill, or a clean ace nobody touches.
-Both teams.
+KEEP a clip if it shows an elite play: stuff blocks, powerful kills that land,
+diving digs that save a point, then a kill, or a clean ace nobody touches.
+Both teams. Use 8, 9, or 10 only for a keep.
 
 REJECT routine rallies, average spikes, walking only, huddles, serve setup
 with no hit, funny misses, net luck, and dead time with no elite play.
 
 Return JSON only:
-{"clips": [{"index": 0, "keep": true, "score": 9, "event": "kill", "start": 2.0, "end": 19.5, "reason": "..."}]}
+{"clips": [{"index": 0, "keep": true, "score": 9, "event": "kill", "start": 2.0, "end": 17.0, "reason": "..."}]}
 
 Give one object per video. score is 0-10. start and end are seconds in this clip.
 """.strip()
@@ -117,6 +121,15 @@ def _parse_review(text: str, batch_len: int, window_s: float = REVIEW_DUR) -> li
     return out
 
 
+def assert_review_complete(rows: list[dict]) -> list[dict]:
+    missing = sum(1 for r in rows if r.get("reason") == "missing review")
+    if missing:
+        raise RuntimeError(
+            f"400 INVALID_ARGUMENT incomplete review missing={missing}"
+        )
+    return rows
+
+
 def review_batch(
     client: genai.Client,
     clips: list[dict],
@@ -143,7 +156,10 @@ def review_batch(
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(
                     disable=True
                 ),
-                thinking_config=types.ThinkingConfig(thinking_level="LOW"),
+                thinking_config=types.ThinkingConfig(
+                    thinking_level=REVIEW_THINKING_LEVEL
+                ),
+                media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
                 http_options=types.HttpOptions(timeout=HTTP_TIMEOUT_MS),
             ),
         )
@@ -160,7 +176,9 @@ def review_batch(
     elapsed = round(time.time() - t0, 1)
     print(f"  ok review {elapsed}s", flush=True)
     window_s = max(float(c.get("window_dur_s") or REVIEW_DUR) for c in clips)
-    rows = _parse_review(response.text or "{}", len(clips), window_s=window_s)
+    rows = assert_review_complete(
+        _parse_review(response.text or "{}", len(clips), window_s=window_s)
+    )
     usage = getattr(response, "usage_metadata", None)
     out: list[dict] = []
     for rec, row in zip(clips, rows):
@@ -180,6 +198,52 @@ def review_batch(
     return out
 
 
+def review_ladder_rows(
+    group: list[dict],
+    attempt,
+    *,
+    quota_left: int = MAX_429_STREAK,
+    sleeper=time.sleep,
+    sleep_s: float = REVIEW_429_SLEEP_S,
+) -> list[dict]:
+    """Try one batch. On 400 or timeout, split. On 429, wait and retry this batch."""
+    try:
+        return list(attempt(group) or [])
+    except Exception as exc:
+        if isinstance(exc, FileNotFoundError):
+            raise
+        if is_rate_limit(exc):
+            if quota_left <= 0:
+                print(f"  skip batch n={len(group)} 429", flush=True)
+                return []
+            print(f"  wait 429 n={len(group)} left={quota_left}", flush=True)
+            sleeper(sleep_s)
+            return review_ladder_rows(
+                group,
+                attempt,
+                quota_left=quota_left - 1,
+                sleeper=sleeper,
+                sleep_s=sleep_s,
+            )
+        kids = child_review_groups(group)
+        if not kids or not should_split_span(exc):
+            print(f"  skip batch n={len(group)} {exc}", flush=True)
+            return []
+        print(f"  split review n={len(group)} -> {[len(k) for k in kids]}", flush=True)
+        out: list[dict] = []
+        for kid in kids:
+            out.extend(
+                review_ladder_rows(
+                    kid,
+                    attempt,
+                    quota_left=MAX_429_STREAK,
+                    sleeper=sleeper,
+                    sleep_s=sleep_s,
+                )
+            )
+        return out
+
+
 def review_clips(
     clips: list[dict],
     dest: Path,
@@ -195,32 +259,20 @@ def review_clips(
         vertexai=True, project=VERTEX_PROJECT, location=VERTEX_LOCATION
     )
     reviewed: list[dict] = []
-    partial = False
-    streak_429 = 0
     groups = batches(clips, n=REVIEW_BATCH)
     for i, group in enumerate(groups, start=1):
         print(f"REVIEW {MODEL} batch {i}/{len(groups)} n={len(group)}", flush=True)
-        try:
-            reviewed.extend(review_batch(client, group, proxies, prompt=prompt))
-        except Exception as exc:
-            if is_rate_limit(exc):
-                streak_429 += 1
-                partial = True
-                print(f"  skip batch {i} 429 streak={streak_429}", flush=True)
-                if streak_429 >= MAX_429_STREAK:
-                    print("PARTIAL too many 429s; keep finished reviews", flush=True)
-                    break
-                continue
-            if is_deadline(exc):
-                partial = True
-                print(f"  skip batch {i} deadline", flush=True)
-                continue
-            print(f"FAIL review batch {i} {exc}", file=sys.stderr, flush=True)
-            partial = True
-            break
-        streak_429 = 0
-    if len(reviewed) < len(clips):
-        partial = True
+
+        def _attempt(g: list[dict]) -> list[dict]:
+            tries = BATCH_TRIES if len(g) <= 1 else 1
+            return run_with_retries(
+                lambda g=g: review_batch(client, g, proxies, prompt=prompt),
+                tries=tries,
+                sleep_s=RETRY_SLEEP_S,
+            )
+
+        reviewed.extend(review_ladder_rows(group, _attempt))
+    partial = len(reviewed) < len(clips)
     payload = {
         "model": MODEL,
         "partial": partial,

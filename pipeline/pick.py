@@ -7,10 +7,13 @@ from pathlib import Path
 
 SCAN_CAP = 75
 REVIEW_BATCH = 10
-REEL_KEEP = 8
+REEL_MIN = 8
+REEL_KEEP = 10
+MIN_REVIEW_SCORE = 8
 STABLE_S = 8.0
 POLL_S = 1.0
 WAIT_TIMEOUT_S = 7200.0
+GENS_NAME = "generations"
 
 
 def cap_by_score(rows: list[dict], limit: int = SCAN_CAP) -> list[dict]:
@@ -30,13 +33,41 @@ def batches(items: list, n: int = REVIEW_BATCH) -> list[list]:
     return [items[i : i + n] for i in range(0, len(items), n)]
 
 
-def pick_reel(reviews: list[dict], n: int = REEL_KEEP) -> list[dict]:
-    """Take up to n clips 3.8 marked keep. Concat order is chrono. Never pad."""
-    kept = [r for r in reviews if r.get("keep")]
+def child_review_groups(group: list) -> list[list]:
+    """Next smaller 3.8 batches after a failed 10-clip or 5-clip call."""
+    n = len(group)
+    if n <= 1:
+        return []
+    if n > 5:
+        mid = (n + 1) // 2
+        return [group[:mid], group[mid:]]
+    return [[item] for item in group]
+
+
+def pick_reel(
+    reviews: list[dict],
+    n: int = REEL_KEEP,
+    *,
+    min_n: int = REEL_MIN,
+    min_score: int = MIN_REVIEW_SCORE,
+) -> list[dict]:
+    """Take 8 to 10 clips. Prefer 3.8 keep with score >= 8. Fill from high scores."""
+    n = max(0, int(n))
+    min_n = max(0, min(int(min_n), n))
+    kept = [
+        r
+        for r in reviews
+        if r.get("keep") and int(r.get("score") or 0) >= min_score
+    ]
     kept.sort(key=lambda r: (-int(r.get("score") or 0), float(r["start_s"])))
-    top = kept[: max(0, n)]
+    top = kept[:n]
+    if len(top) < min_n:
+        used = {id(r) for r in top}
+        rest = [r for r in reviews if id(r) not in used]
+        rest.sort(key=lambda r: (-int(r.get("score") or 0), float(r["start_s"])))
+        top.extend(rest[: min_n - len(top)])
     top.sort(key=lambda r: float(r["start_s"]))
-    return top
+    return top[:n]
 
 
 def fallback_reel(scan_rows: list[dict], n: int = REEL_KEEP) -> list[dict]:
@@ -45,9 +76,41 @@ def fallback_reel(scan_rows: list[dict], n: int = REEL_KEEP) -> list[dict]:
     return sorted(top, key=lambda r: float(r["start_s"]))
 
 
+def fill_partial_reel(
+    reviewed: list[dict],
+    candidates: list[dict],
+    *,
+    partial: bool,
+    n: int = REEL_KEEP,
+) -> list[dict]:
+    """Keep 3.8 keeps. If review stopped early, fill from unreviewed 2.5 clips."""
+    kept = pick_reel(reviewed, n=n)
+    if not partial or len(kept) >= n:
+        return kept
+    seen = {r.get("file") for r in reviewed if r.get("file")}
+    unused = [c for c in candidates if c.get("file") not in seen]
+    extra = fallback_reel(unused, n=n - len(kept))
+    combined = kept + extra
+    combined.sort(key=lambda r: float(r["start_s"]))
+    return combined
+
+
+def gens_dir(root: Path) -> Path:
+    return root / GENS_NAME
+
+
+def ensure_gens_dir(root: Path) -> Path:
+    path = gens_dir(root)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def next_gen_n(root: Path) -> int:
     nums: list[int] = []
-    for path in root.glob("gen_*"):
+    folder = gens_dir(root)
+    if not folder.is_dir():
+        return 1
+    for path in folder.glob("gen_*"):
         if not path.is_dir():
             continue
         try:
@@ -64,6 +127,19 @@ def inbox_mp4s(inbox: Path) -> list[Path]:
         (p for p in inbox.glob("*.mp4") if p.is_file()),
         key=lambda p: p.stat().st_mtime,
     )
+
+
+def pick_source_mp4(inbox: Path, done: Path, source: Path) -> tuple[Path, bool]:
+    """Inbox first, then done, then source.mp4. True means move to done after the reel."""
+    dropped = inbox_mp4s(inbox)
+    if dropped:
+        return dropped[0], True
+    archived = inbox_mp4s(done)
+    if archived:
+        return archived[0], False
+    if source.is_file():
+        return source, False
+    raise FileNotFoundError(f"drop an MP4 in {inbox} or pass --source")
 
 
 def wait_until_complete(

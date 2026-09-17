@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from pathlib import Path
 
 HIT_GLOB = "vertex_best_*.json"
 MIN_SCORE = 8
 WINDOW_S = 600
+HALF_S = 300
+SEGMENT_S = 60
+MAX_INLINE_VIDEOS = 10
 
 
 def clock(seconds: float) -> str:
@@ -84,6 +88,69 @@ def uncovered_windows(
             nxt = min(cur + window_s, b)
             out.append((cur, nxt))
             cur = nxt
+    return out
+
+
+def child_scan_spans(start_s: int, end_s: int) -> list[tuple[int, int]]:
+    """Next smaller spans after a failed 10-min or 5-min inline call."""
+    if end_s <= start_s:
+        return []
+    span = end_s - start_s
+    if span > HALF_S:
+        mid = start_s + HALF_S
+        if mid >= end_s:
+            return iter_window_segments(start_s, end_s)
+        return [(start_s, mid), (mid, end_s)]
+    if span > SEGMENT_S:
+        return iter_window_segments(start_s, end_s)
+    return []
+
+
+def should_split_span(exc: BaseException) -> bool:
+    """Split on 400 or timeout. Do not split on quota errors."""
+    if is_rate_limit(exc):
+        return False
+    return is_deadline(exc) or is_invalid_arg(exc) or is_server_error(exc)
+
+
+def scan_ladder_rows(start_s: int, end_s: int, attempt) -> list:
+    """Try one span. On 400 or timeout, split. Skip a failed 60 s leaf."""
+    try:
+        return list(attempt(start_s, end_s) or [])
+    except Exception as exc:
+        if is_rate_limit(exc) or isinstance(exc, FileNotFoundError):
+            raise
+        kids = child_scan_spans(start_s, end_s)
+        if not kids or not should_split_span(exc):
+            return []
+        rows: list = []
+        for a, b in kids:
+            rows.extend(scan_ladder_rows(a, b, attempt))
+        return rows
+
+
+def iter_window_segments(
+    start_s: int,
+    end_s: int,
+    *,
+    segment_s: int = SEGMENT_S,
+    max_videos: int = MAX_INLINE_VIDEOS,
+) -> list[tuple[int, int]]:
+    """Split a failed 5-min half into <=10 clips of about 60 s."""
+    if end_s <= start_s:
+        return []
+    span = end_s - start_s
+    seg = max(1, int(segment_s))
+    cap = max(1, int(max_videos))
+    need = (span + seg - 1) // seg
+    if need > cap:
+        seg = (span + cap - 1) // cap
+    out: list[tuple[int, int]] = []
+    t = start_s
+    while t < end_s:
+        nxt = min(t + seg, end_s)
+        out.append((t, nxt))
+        t = nxt
     return out
 
 
@@ -172,6 +239,45 @@ def is_deadline(exc: BaseException) -> bool:
 def is_rate_limit(exc: BaseException) -> bool:
     text = str(exc)
     return "RESOURCE_EXHAUSTED" in text or "429" in text
+
+
+def is_invalid_arg(exc: BaseException) -> bool:
+    return "INVALID_ARGUMENT" in str(exc)
+
+
+def is_server_error(exc: BaseException) -> bool:
+    text = str(exc)
+    return "INTERNAL" in text or "UNAVAILABLE" in text or " 503" in text or "503 " in text
+
+
+def should_retry_window(exc: BaseException) -> bool:
+    """Retry a dead or invalid Vertex window. Do not retry quota errors."""
+    if is_rate_limit(exc):
+        return False
+    return is_deadline(exc) or is_invalid_arg(exc) or is_server_error(exc)
+
+
+def run_with_retries(
+    fn,
+    *,
+    tries: int = 3,
+    sleep_s: float = 8.0,
+    sleeper=time.sleep,
+):
+    """Call fn. Retry deadline and 400. Raise the last error if all tries fail."""
+    last: BaseException | None = None
+    for attempt in range(1, max(1, tries) + 1):
+        try:
+            return fn()
+        except Exception as exc:
+            last = exc
+            if not should_retry_window(exc):
+                raise
+            print(f"  retry {attempt}/{tries} {exc}", flush=True)
+            if attempt < tries:
+                sleeper(sleep_s)
+    assert last is not None
+    raise last
 
 
 def write_payload(payload: dict, out_dir: Path) -> int:

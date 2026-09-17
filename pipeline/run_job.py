@@ -24,10 +24,13 @@ from media import concat_wide, cut_wide, probe_secs
 from pick import (
     REEL_KEEP,
     cap_by_score,
+    ensure_gens_dir,
     fallback_reel,
-    inbox_mp4s,
+    fill_partial_reel,
+    gens_dir,
     next_gen_n,
     pick_reel,
+    pick_source_mp4,
     wait_until_complete,
 )
 
@@ -62,13 +65,9 @@ def resolve_source(arg: Path | None) -> tuple[Path, bool]:
         path = arg if arg.is_absolute() else (ROOT / arg).resolve()
         wait_until_complete(path)
         return path, False
-    dropped = inbox_mp4s(INBOX)
-    if dropped:
-        path = wait_until_complete(dropped[0])
-        return path, True
-    if SOURCE.exists():
-        return SOURCE, False
-    raise FileNotFoundError(f"drop an MP4 in {INBOX} or pass --source")
+    path, from_inbox = pick_source_mp4(INBOX, DONE, SOURCE)
+    wait_until_complete(path)
+    return path, from_inbox
 
 
 def slice_candidates(
@@ -235,8 +234,9 @@ def run_job(
     extend_cool: bool = False,
 ) -> int:
     src, from_inbox = resolve_source(source)
+    gens = ensure_gens_dir(ROOT)
     n = gen_n if gen_n is not None else next_gen_n(ROOT)
-    dest = ROOT / f"gen_{n}"
+    dest = gens / f"gen_{n}"
     dest.mkdir(parents=True, exist_ok=True)
     clips_dir = dest / "clips"
     stills_dir = dest / "stills"
@@ -255,7 +255,7 @@ def run_job(
     extend_done = False
     review_payload: dict | None = None
     if from_gen is not None:
-        prior_path = ROOT / f"gen_{from_gen}" / "keeps.json"
+        prior_path = gens_dir(ROOT) / f"gen_{from_gen}" / "keeps.json"
         if not prior_path.exists():
             print(f"missing {prior_path}", file=sys.stderr)
             return 1
@@ -343,6 +343,17 @@ def run_job(
             picked = merge_trims(candidates, review_payload["clips"])
         else:
             picked = pick_reel(review_payload["clips"])
+            if review_payload.get("partial") and len(picked) < REEL_KEEP:
+                filled = fill_partial_reel(
+                    review_payload["clips"],
+                    candidates,
+                    partial=True,
+                    n=REEL_KEEP,
+                )
+                if len(filled) > len(picked):
+                    picker = "review-partial-fill"
+                    picked = filled
+                    print(f"3.8 partial; fill n={len(picked)}", flush=True)
             if not picked:
                 picker = "scan-fallback"
                 picked = fallback_reel(candidates, n=REEL_KEEP)
