@@ -1,0 +1,61 @@
+{
+  "model": "gemini-2.5-flash",
+  "backend": "vertex-ai",
+  "project": "gen-lang-client-0442353446",
+  "youtube": "https://www.youtube.com/watch?v=sbGPehFw7n8",
+  "requested_window": {
+    "start": "5400s",
+    "end": "6000s",
+    "label": "1:30:00-1:40:00"
+  },
+  "elapsed_s": 89.4,
+  "prompt_token_count": 169991,
+  "candidates_token_count": 287,
+  "timestamp_note": "Times in start/end are window-relative. source_* is match time.",
+  "highlights": [
+    {
+      "start": "1:30:00",
+      "end": "1:30:05",
+      "source_start": "1:30:00",
+      "source_end": "1:30:05",
+      "score": 9,
+      "event": "Block",
+      "team_side": "right",
+      "keep": true,
+      "reason": "Stuff block leading to a point."
+    },
+    {
+      "start": "1:30:21",
+      "end": "1:30:27",
+      "source_start": "1:30:21",
+      "source_end": "1:30:27",
+      "score": 9,
+      "event": "Kill",
+      "team_side": "left",
+      "keep": true,
+      "reason": "Powerful kill that lands."
+    },
+    {
+      "start": "1:31:46",
+      "end": "1:31:52",
+      "source_start": "1:31:46",
+      "source_end": "1:31:52",
+      "score": 9,
+      "event": "Kill",
+      "team_side": "right",
+      "keep": true,
+      "reason": "Powerful kill that lands."
+    },
+    {
+      "start": "1:32:37",
+      "end": "1:32:42",
+      "source_start": "1:32:37",
+      "source_end": "1:32:42",
+      "score": 9,
+      "event": "Block",
+      "team_side": "right",
+      "keep": true,
+      "reason": "Stuff block."
+    }
+  ]
+}

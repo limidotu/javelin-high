@@ -1,0 +1,61 @@
+{
+  "model": "gemini-2.5-flash",
+  "backend": "vertex-ai",
+  "project": "gen-lang-client-0442353446",
+  "youtube": "https://www.youtube.com/watch?v=sbGPehFw7n8",
+  "requested_window": {
+    "start": "2400s",
+    "end": "3000s",
+    "label": "40:00-50:00"
+  },
+  "elapsed_s": 75.9,
+  "prompt_token_count": 169991,
+  "candidates_token_count": 313,
+  "timestamp_note": "Times in start/end are window-relative. source_* is match time.",
+  "highlights": [
+    {
+      "start": "00:05",
+      "end": "00:13",
+      "source_start": "40:05",
+      "source_end": "40:13",
+      "score": 9,
+      "event": "Rally with defensive plays and kill",
+      "team_side": "right",
+      "keep": true,
+      "reason": "Multiple defensive touches and a successful attack to win the point."
+    },
+    {
+      "start": "00:29",
+      "end": "00:45",
+      "source_start": "40:29",
+      "source_end": "40:45",
+      "score": 9,
+      "event": "Long rally ending with a block",
+      "team_side": "left",
+      "keep": true,
+      "reason": "Sustained rally with good defensive effort and a decisive block."
+    },
+    {
+      "start": "01:09",
+      "end": "01:11",
+      "source_start": "41:09",
+      "source_end": "41:11",
+      "score": 8,
+      "event": "Diving dig attempt and kill",
+      "team_side": "right",
+      "keep": true,
+      "reason": "Impressive defensive effort followed by a powerful kill."
+    },
+    {
+      "start": "03:47",
+      "end": "03:55",
+      "source_start": "43:47",
+      "source_end": "43:55",
+      "score": 8,
+      "event": "Stuff block",
+      "team_side": "left",
+      "keep": true,
+      "reason": "A clean and powerful block directly for a point."
+    }
+  ]
+}

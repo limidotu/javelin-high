@@ -1,0 +1,72 @@
+{
+  "model": "gemini-2.5-flash",
+  "backend": "vertex-ai",
+  "project": "gen-lang-client-0442353446",
+  "youtube": "https://www.youtube.com/watch?v=sbGPehFw7n8",
+  "requested_window": {
+    "start": "4200s",
+    "end": "4800s",
+    "label": "1:10:00-1:20:00"
+  },
+  "elapsed_s": 135.3,
+  "prompt_token_count": 169991,
+  "candidates_token_count": 366,
+  "timestamp_note": "Times in start/end are window-relative. source_* is match time.",
+  "highlights": [
+    {
+      "start": "1:10:06",
+      "end": "1:10:12",
+      "source_start": "1:10:06",
+      "source_end": "1:10:12",
+      "score": 9,
+      "event": "Kill",
+      "team_side": "left",
+      "keep": true,
+      "reason": "Powerful spike that scores a point."
+    },
+    {
+      "start": "1:11:15",
+      "end": "1:11:21",
+      "source_start": "1:11:15",
+      "source_end": "1:11:21",
+      "score": 8,
+      "event": "Block",
+      "team_side": "right",
+      "keep": true,
+      "reason": "Successful block against a spike attempt."
+    },
+    {
+      "start": "1:12:21",
+      "end": "1:12:27",
+      "source_start": "1:12:21",
+      "source_end": "1:12:27",
+      "score": 9,
+      "event": "Kill",
+      "team_side": "left",
+      "keep": true,
+      "reason": "Powerful spike that scores a point."
+    },
+    {
+      "start": "1:12:44",
+      "end": "1:12:50",
+      "source_start": "1:12:44",
+      "source_end": "1:12:50",
+      "score": 8,
+      "event": "Kill",
+      "team_side": "left",
+      "keep": true,
+      "reason": "Spike lands inbounds."
+    },
+    {
+      "start": "1:12:51",
+      "end": "1:12:57",
+      "source_start": "1:12:51",
+      "source_end": "1:12:57",
+      "score": 8,
+      "event": "Kill",
+      "team_side": "left",
+      "keep": true,
+      "reason": "Spike lands inbounds."
+    }
+  ]
+}

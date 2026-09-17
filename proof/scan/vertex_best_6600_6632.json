@@ -1,0 +1,16 @@
+{
+  "model": "gemini-2.5-flash",
+  "backend": "vertex-ai",
+  "project": "gen-lang-client-0442353446",
+  "youtube": "https://www.youtube.com/watch?v=sbGPehFw7n8",
+  "requested_window": {
+    "start": "6600s",
+    "end": "6632s",
+    "label": "1:50:00-1:50:32"
+  },
+  "elapsed_s": 11.5,
+  "prompt_token_count": 9247,
+  "candidates_token_count": 1,
+  "timestamp_note": "Times in start/end are window-relative. source_* is match time.",
+  "highlights": []
+}

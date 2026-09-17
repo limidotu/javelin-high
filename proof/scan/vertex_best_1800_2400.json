@@ -1,0 +1,72 @@
+{
+  "model": "gemini-2.5-flash",
+  "backend": "vertex-ai",
+  "project": "gen-lang-client-0442353446",
+  "youtube": "https://www.youtube.com/watch?v=sbGPehFw7n8",
+  "requested_window": {
+    "start": "1800s",
+    "end": "2400s",
+    "label": "30:00-40:00"
+  },
+  "elapsed_s": 68.0,
+  "prompt_token_count": 320791,
+  "candidates_token_count": 428,
+  "timestamp_note": "Times in start/end are window-relative. source_* is match time.",
+  "highlights": [
+    {
+      "start": "00:00",
+      "end": "00:05",
+      "source_start": "30:00",
+      "source_end": "30:05",
+      "score": 9,
+      "event": "Stuff block",
+      "team_side": "left",
+      "keep": true,
+      "reason": "Player on the left side executes a stuff block directly at the net, immediately securing a point."
+    },
+    {
+      "start": "00:30",
+      "end": "00:40",
+      "source_start": "30:30",
+      "source_end": "30:40",
+      "score": 8,
+      "event": "Powerful kill",
+      "team_side": "right",
+      "keep": true,
+      "reason": "Following a clean set, a player on the right side delivers a forceful spike that lands untouched, earning a point."
+    },
+    {
+      "start": "01:35",
+      "end": "01:45",
+      "source_start": "31:35",
+      "source_end": "31:45",
+      "score": 9,
+      "event": "Powerful kill",
+      "team_side": "left",
+      "keep": true,
+      "reason": "After a good rally, a player on the left side jumps high and smashes the ball past the blockers for a decisive kill."
+    },
+    {
+      "start": "03:19",
+      "end": "03:29",
+      "source_start": "33:19",
+      "source_end": "33:29",
+      "score": 8,
+      "event": "Powerful kill",
+      "team_side": "right",
+      "keep": true,
+      "reason": "The right-side hitter gets a perfect set and delivers a hard-driven ball that defenders cannot handle."
+    },
+    {
+      "start": "03:45",
+      "end": "03:55",
+      "source_start": "33:45",
+      "source_end": "33:55",
+      "score": 8,
+      "event": "Powerful kill",
+      "team_side": "left",
+      "keep": true,
+      "reason": "A quick set to the left side results in a powerful, well-placed spike that secures the point."
+    }
+  ]
+}

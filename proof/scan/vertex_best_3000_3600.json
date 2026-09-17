@@ -1,0 +1,72 @@
+{
+  "model": "gemini-2.5-flash",
+  "backend": "vertex-ai",
+  "project": "gen-lang-client-0442353446",
+  "youtube": "https://www.youtube.com/watch?v=sbGPehFw7n8",
+  "requested_window": {
+    "start": "3000s",
+    "end": "3600s",
+    "label": "50:00-1:00:00"
+  },
+  "elapsed_s": 91.1,
+  "prompt_token_count": 169991,
+  "candidates_token_count": 361,
+  "timestamp_note": "Times in start/end are window-relative. source_* is match time.",
+  "highlights": [
+    {
+      "start": "50:08",
+      "end": "50:15",
+      "source_start": "50:08",
+      "source_end": "50:15",
+      "score": 9,
+      "event": "Kill",
+      "team_side": "left",
+      "keep": true,
+      "reason": "Powerful jump spike that landed for a point."
+    },
+    {
+      "start": "51:08",
+      "end": "51:15",
+      "source_start": "51:08",
+      "source_end": "51:15",
+      "score": 9,
+      "event": "Kill",
+      "team_side": "left",
+      "keep": true,
+      "reason": "Powerful jump spike that landed for a point despite a block attempt."
+    },
+    {
+      "start": "51:58",
+      "end": "52:03",
+      "source_start": "51:58",
+      "source_end": "52:03",
+      "score": 9,
+      "event": "Kill",
+      "team_side": "left",
+      "keep": true,
+      "reason": "Powerful spike by female player, landing cleanly for a point."
+    },
+    {
+      "start": "55:02",
+      "end": "55:07",
+      "source_start": "55:02",
+      "source_end": "55:07",
+      "score": 9,
+      "event": "Kill",
+      "team_side": "right",
+      "keep": true,
+      "reason": "Powerful jump spike, not returned."
+    },
+    {
+      "start": "58:43",
+      "end": "58:51",
+      "source_start": "58:43",
+      "source_end": "58:51",
+      "score": 9,
+      "event": "Kill",
+      "team_side": "right",
+      "keep": true,
+      "reason": "Powerful jump spike, not returned."
+    }
+  ]
+}

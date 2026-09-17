@@ -1,0 +1,61 @@
+{
+  "model": "gemini-2.5-flash",
+  "backend": "vertex-ai",
+  "project": "gen-lang-client-0442353446",
+  "youtube": "https://www.youtube.com/watch?v=sbGPehFw7n8",
+  "requested_window": {
+    "start": "6000s",
+    "end": "6600s",
+    "label": "1:40:00-1:50:00"
+  },
+  "elapsed_s": 58.0,
+  "prompt_token_count": 320791,
+  "candidates_token_count": 342,
+  "timestamp_note": "Times in start/end are window-relative. source_* is match time.",
+  "highlights": [
+    {
+      "start": "00:46",
+      "end": "00:51",
+      "source_start": "1:40:46",
+      "source_end": "1:40:51",
+      "score": 9,
+      "event": "Powerful kill",
+      "team_side": "right",
+      "keep": true,
+      "reason": "The player on the right side executes a powerful kill, sending the ball cleanly to the opponent's court."
+    },
+    {
+      "start": "01:20",
+      "end": "01:25",
+      "source_start": "1:41:20",
+      "source_end": "1:41:25",
+      "score": 8,
+      "event": "Stuff block",
+      "team_side": "right",
+      "keep": true,
+      "reason": "A player on the right side performs an effective stuff block, stopping the opponent's attack at the net."
+    },
+    {
+      "start": "04:14",
+      "end": "04:19",
+      "source_start": "1:44:14",
+      "source_end": "1:44:19",
+      "score": 9,
+      "event": "Powerful kill",
+      "team_side": "left",
+      "keep": true,
+      "reason": "A player on the left side delivers a strong kill, landing the ball successfully for a point."
+    },
+    {
+      "start": "06:09",
+      "end": "06:14",
+      "source_start": "1:46:09",
+      "source_end": "1:46:14",
+      "score": 9,
+      "event": "Stuff block",
+      "team_side": "left",
+      "keep": true,
+      "reason": "A player on the left side achieves a precise stuff block, preventing the opposing team's spike from crossing the net."
+    }
+  ]
+}
