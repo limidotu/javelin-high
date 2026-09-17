@@ -1,4 +1,4 @@
-"""v1 select, windows, and drop-file complete checks."""
+"""Select, windows, and drop-file complete checks."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from review_clips import _parse_review
+from scan_io import load_all_keeps, merge_windows, uncovered_windows
 from clip_window import (
     REVIEW_DUR,
     clamp_trim,
@@ -19,8 +20,7 @@ from clip_window import (
     review_window,
     trim_from_row,
 )
-from scan_full_match import uncovered_windows
-from v1_select import (
+from pick import (
     REVIEW_BATCH,
     SCAN_CAP,
     batches,
@@ -233,17 +233,37 @@ class TrimWindowTests(unittest.TestCase):
         self.assertEqual(one_cool_caps(rows), [20.0, 40.0, 20.0])
 
 
-class RealScanCapTests(unittest.TestCase):
-    def test_proof_scan_caps_at_75(self) -> None:
-        from cut_vertex_reel import load_all_keeps, merge_windows
-
-        scan = Path(__file__).resolve().parent / "scan"
-        if not any(scan.glob("vertex_best_*.json")):
-            self.skipTest("no scan json")
-        rows = merge_windows(load_all_keeps(scan))
-        got = cap_by_score(rows)
-        self.assertGreater(len(got), 0)
-        self.assertLessEqual(len(got), SCAN_CAP)
+class ScanIoTests(unittest.TestCase):
+    def test_load_keeps_skips_low_scores(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "vertex_best_0_600.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "highlights": [
+                            {
+                                "source_start": "01:00",
+                                "source_end": "01:08",
+                                "event": "kill",
+                                "keep": True,
+                                "score": 9,
+                            },
+                            {
+                                "source_start": "02:00",
+                                "source_end": "02:08",
+                                "event": "miss",
+                                "keep": True,
+                                "score": 6,
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            rows = merge_windows(load_all_keeps(Path(raw)))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["event"], "kill")
+            self.assertLessEqual(len(cap_by_score(rows)), SCAN_CAP)
 
 
 class ClipWindowTests(unittest.TestCase):

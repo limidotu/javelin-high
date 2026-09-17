@@ -12,10 +12,9 @@ from google import genai
 from google.genai import types
 
 from gemini_defaults import SCAN_MODEL, VERTEX_LOCATION, VERTEX_PROJECT
-from scan_full_match import (
-    HTTP_TIMEOUT_MS,
-    MAX_429_STREAK,
-    PROMPT,
+from media import assert_inline_ok, make_scan_proxy, probe_secs
+from scan_io import (
+    WINDOW_S,
     clock,
     existing_spans,
     is_deadline,
@@ -24,11 +23,27 @@ from scan_full_match import (
     uncovered_windows,
     write_payload,
 )
-from v1_media import assert_inline_ok, make_scan_proxy, probe_secs
 
 ROOT = Path(__file__).resolve().parent
 MODEL = SCAN_MODEL
-WINDOW_S = 600
+HTTP_TIMEOUT_MS = 60_000
+MAX_429_STREAK = 3
+PROMPT = """
+Amateur indoor volleyball. Pick THE BEST highlight moments only.
+
+KEEP only elite plays: stuff blocks, powerful kills that land, diving digs
+that save a point, then a kill, clean aces nobody touches. Both teams.
+
+REJECT routine rallies, average spikes, walking, huddles, serve setup,
+funny misses, net luck, dead time, and anything you would skip on a recap.
+
+Return JSON only: a list of objects with keys
+start,end,score,event,team_side,reason.
+Times are MM:SS relative to THIS window, not the full match.
+score is 0-10. Use 8, 9, or 10 only for a keep. Prefer 2 to 5 items.
+team_side is left or right. Pad each rally about 6 to 10 seconds.
+If this window has no elite play, return [].
+""".strip()
 
 
 def scan_window_file(

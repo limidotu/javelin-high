@@ -16,12 +16,12 @@ from clip_window import (
     one_cool_caps,
     review_window,
 )
-from cut_vertex_reel import load_all_keeps, merge_windows, slug
 from gemini_defaults import REVIEW_MODEL, SCAN_MODEL
 from review_clips import LONG_PROMPT, review_clips
+from scan_io import load_all_keeps, merge_windows, slug
 from scan_local import scan_local
-from v1_media import concat_wide, cut_wide, probe_secs
-from v1_select import (
+from media import concat_wide, cut_wide, probe_secs
+from pick import (
     REEL_KEEP,
     cap_by_score,
     fallback_reel,
@@ -40,7 +40,7 @@ STILL_GAP = 15
 
 def dump_stills(reel: Path, dest_dir: Path, secs: float) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
-    from detect_highlights import ffmpeg_bin
+    from media import ffmpeg_bin
     import subprocess
 
     ff = ffmpeg_bin()

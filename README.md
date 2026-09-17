@@ -22,15 +22,15 @@ pip install -r requirements.txt
 gcloud auth application-default login
 ```
 
-Set the Vertex project in `proof/gemini_defaults.py`. The default project is `gen-lang-client-0442353446`. Location is `global`.
+Set the Vertex project in `pipeline/gemini_defaults.py`. The default project is `gen-lang-client-0442353446`. Location is `global`.
 
-Do not put API keys in git. `proof/.env` stays local.
+Do not put API keys in git. A local `.env` file stays off git.
 
 ## Run a game
 
-1. Drop one complete MP4 into `proof/inbox`.
-2. In `proof`, run `python run_job.py`.
-3. Watch `proof/gen_N/reel.mp4`. Post it or reject it.
+1. Drop one complete MP4 into `pipeline/inbox`.
+2. In `pipeline`, run `python run_job.py`.
+3. Watch `pipeline/gen_N/reel.mp4`. Post it or reject it.
 
 A 2-hour file takes about 15-40 minutes. Time depends on scan coverage and Vertex quota.
 
@@ -40,10 +40,10 @@ Use a known file instead of the inbox:
 python run_job.py --source source.mp4
 ```
 
-Reuse an existing 2.5 scan:
+Reuse a scan from a prior job:
 
 ```
-python run_job.py --skip-scan --scan-dir scan
+python run_job.py --skip-scan --scan-dir gen_N/scan
 ```
 
 Extend the longest high-score clip to 40 s:
@@ -54,21 +54,19 @@ python run_job.py --from-gen 8 --extend-cool --gen 10
 
 ## Layout
 
-- `proof/run_job.py` — MVP job.
-- `proof/scan_local.py` — 2.5 window scan on the local file.
-- `proof/review_clips.py` — 3.8 batch review and 40 s long-rally pass.
-- `proof/inbox/` — drop folder.
-- `proof/scan/` — example 2.5 timestamps for the Sept 12 match.
-- `proof/legacy/` — old YouTube and 9:16 trial scripts.
-- `proof/follow_cam.py` — 9:16 follow camera. Not in the MVP path.
+- `pipeline/run_job.py` — drop-folder job.
+- `pipeline/scan_local.py` — 2.5 window scan on the local file.
+- `pipeline/review_clips.py` — 3.8 batch review and 40 s long-rally pass.
+- `pipeline/inbox/` — drop folder.
+- `pipeline/gen_N/` — one job output. Git ignores this folder.
 
 ## Tests
 
 ```
-cd proof
-python -m unittest test_v1 test_follow_cam
+cd pipeline
+python -m unittest test_pipeline
 ```
 
 ## What git ignores
 
-Source MP4 files, `proof/.env`, `proof/gen_*` outputs, and YOLO weights. Do not commit those files.
+Source MP4 files, `.env`, `pipeline/gen_*` outputs, and scan JSON from a match. Do not commit those files.

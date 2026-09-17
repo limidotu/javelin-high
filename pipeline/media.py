@@ -5,7 +5,34 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from detect_highlights import concat, ffmpeg_bin
+
+def ffmpeg_bin() -> str:
+    import imageio_ffmpeg
+
+    return imageio_ffmpeg.get_ffmpeg_exe()
+
+
+def concat(clips: list[Path], dest: Path) -> None:
+    lst = dest.with_suffix(".txt")
+    lst.write_text("".join(f"file '{p.as_posix()}'\n" for p in clips), encoding="utf-8")
+    subprocess.run(
+        [
+            ffmpeg_bin(),
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(lst),
+            "-c",
+            "copy",
+            str(dest),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 SCAN_PROXY_VF = "fps=1,scale=640:360"
 REVIEW_PROXY_VF = "scale=854:480,fps=10"
