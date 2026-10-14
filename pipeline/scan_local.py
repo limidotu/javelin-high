@@ -11,7 +11,7 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
-from gemini_defaults import SCAN_MODEL, VERTEX_LOCATION, VERTEX_PROJECT
+from gemini_defaults import SCAN_MODEL, VERTEX_LOCATION, VERTEX_PROJECT, uses_thinking_level
 from media import assert_inline_ok, make_scan_proxy, probe_secs
 from scan_io import (
     SEGMENT_S,
@@ -86,7 +86,9 @@ def scan_span(
     *,
     window_start: int,
     window_end: int,
+    model: str | None = None,
 ) -> list[dict]:
+    use = model or MODEL
     dest = proxy_dir / f"w_{window_start}_{window_end}_{start_s}_{end_s}.mp4"
     print(f"  proxy {start_s}-{end_s} ...", flush=True)
     make_scan_proxy(source, start_s, end_s, dest)
@@ -96,18 +98,19 @@ def scan_span(
     print(f"  call {start_s}-{end_s} ...", flush=True)
     timeout_ms = span_timeout_ms(end_s - start_s)
     prompt = scan_prompt(end_s - start_s)
+    cfg = {
+        "response_mime_type": "application/json",
+        "automatic_function_calling": types.AutomaticFunctionCallingConfig(disable=True),
+        "http_options": types.HttpOptions(timeout=timeout_ms),
+    }
+    if uses_thinking_level(use):
+        cfg["thinking_config"] = types.ThinkingConfig(thinking_level="LOW")
 
     def _run():
         return client.models.generate_content(
-            model=MODEL,
+            model=use,
             contents=[video, prompt],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                    disable=True
-                ),
-                http_options=types.HttpOptions(timeout=timeout_ms),
-            ),
+            config=types.GenerateContentConfig(**cfg),
         )
 
     pool = ThreadPoolExecutor(max_workers=1)
@@ -132,7 +135,9 @@ def scan_window_file(
     end_s: int,
     proxy_dir: Path,
     video_end: int,
+    model: str | None = None,
 ) -> dict:
+    use = model or MODEL
     print(f"  window {start_s}-{end_s} try {end_s - start_s}s", flush=True)
     t0 = time.time()
 
@@ -150,6 +155,7 @@ def scan_window_file(
                 video_end,
                 window_start=start_s,
                 window_end=end_s,
+                model=use,
             ),
             tries=tries,
             sleep_s=RETRY_SLEEP_S,
@@ -162,7 +168,7 @@ def scan_window_file(
         flush=True,
     )
     return {
-        "model": MODEL,
+        "model": use,
         "backend": "vertex-ai",
         "project": VERTEX_PROJECT,
         "location": VERTEX_LOCATION,
@@ -190,11 +196,12 @@ def scan_range_file(
     end_s: int,
     proxy_dir: Path,
     video_end: int,
+    model: str | None = None,
 ) -> list[dict]:
     try:
         return [
             scan_window_file(
-                client, source, start_s, end_s, proxy_dir, video_end
+                client, source, start_s, end_s, proxy_dir, video_end, model=model
             )
         ]
     except Exception as exc:
@@ -212,14 +219,16 @@ def scan_local(
     *,
     video_end: int | None = None,
     proxy_dir: Path | None = None,
+    model: str | None = None,
 ) -> dict:
     """Scan what we can. Stop on a 429 streak. Keep finished windows."""
+    use = model or MODEL
     out_dir.mkdir(parents=True, exist_ok=True)
     windows_dir = proxy_dir if proxy_dir is not None else out_dir / "windows"
     windows_dir.mkdir(parents=True, exist_ok=True)
     end = video_end if video_end is not None else int(round(probe_secs(source)))
     print(
-        f"MODEL={MODEL} location={VERTEX_LOCATION} out={out_dir} source={source} end={end}",
+        f"MODEL={use} location={VERTEX_LOCATION} out={out_dir} source={source} end={end}",
         flush=True,
     )
     client = genai.Client(
@@ -232,10 +241,10 @@ def scan_local(
     todo = uncovered_windows(spans, video_end=end, window_s=WINDOW_S)
     print(f"gaps={todo[:8]} n={len(todo)}", flush=True)
     for start_s, end_s in todo:
-        print(f"SCAN {MODEL} {start_s}s-{end_s}s", flush=True)
+        print(f"SCAN {use} {start_s}s-{end_s}s", flush=True)
         try:
             payloads = scan_range_file(
-                client, source, start_s, end_s, windows_dir, end
+                client, source, start_s, end_s, windows_dir, end, model=use
             )
         except Exception as exc:
             if is_rate_limit(exc):

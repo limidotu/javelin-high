@@ -12,7 +12,13 @@ from google import genai
 from google.genai import types
 
 from clip_window import REVIEW_DUR, default_trim, trim_from_row
-from gemini_defaults import REVIEW_MODEL, REVIEW_THINKING_LEVEL, VERTEX_LOCATION, VERTEX_PROJECT
+from gemini_defaults import (
+    REVIEW_MODEL,
+    REVIEW_THINKING_LEVEL,
+    VERTEX_LOCATION,
+    VERTEX_PROJECT,
+    uses_thinking_level,
+)
 from media import assert_inline_ok, make_review_proxy
 from scan_io import is_rate_limit, run_with_retries, should_split_span
 from pick import REVIEW_BATCH, batches, child_review_groups, pick_reel
@@ -135,7 +141,9 @@ def review_batch(
     clips: list[dict],
     proxy_dir: Path,
     prompt: str = PROMPT,
+    model: str | None = None,
 ) -> list[dict]:
+    use = model or MODEL
     parts: list[types.Part] = []
     for i, rec in enumerate(clips):
         src = Path(rec["path"])
@@ -147,21 +155,20 @@ def review_batch(
     t0 = time.time()
     print(f"  call review n={len(parts)} ...", flush=True)
 
+    cfg = {
+        "response_mime_type": "application/json",
+        "automatic_function_calling": types.AutomaticFunctionCallingConfig(disable=True),
+        "http_options": types.HttpOptions(timeout=HTTP_TIMEOUT_MS),
+    }
+    if uses_thinking_level(use):
+        cfg["thinking_config"] = types.ThinkingConfig(thinking_level=REVIEW_THINKING_LEVEL)
+        cfg["media_resolution"] = types.MediaResolution.MEDIA_RESOLUTION_HIGH
+
     def _run():
         return client.models.generate_content(
-            model=MODEL,
+            model=use,
             contents=[*parts, prompt],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                    disable=True
-                ),
-                thinking_config=types.ThinkingConfig(
-                    thinking_level=REVIEW_THINKING_LEVEL
-                ),
-                media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
-                http_options=types.HttpOptions(timeout=HTTP_TIMEOUT_MS),
-            ),
+            config=types.GenerateContentConfig(**cfg),
         )
 
     pool = ThreadPoolExecutor(max_workers=1)
@@ -184,7 +191,7 @@ def review_batch(
     for rec, row in zip(clips, rows):
         merged = dict(rec)
         merged.update(row)
-        merged["review_model"] = MODEL
+        merged["review_model"] = use
         merged["review_elapsed_s"] = elapsed
         merged["prompt_token_count"] = getattr(usage, "prompt_token_count", None)
         merged["candidates_token_count"] = getattr(usage, "candidates_token_count", None)
@@ -250,8 +257,10 @@ def review_clips(
     *,
     proxy_dir: Path | None = None,
     prompt: str = PROMPT,
+    model: str | None = None,
 ) -> dict:
     """Review in batches of 10. Keep finished batches if later calls fail."""
+    use = model or MODEL
     dest.parent.mkdir(parents=True, exist_ok=True)
     proxies = proxy_dir if proxy_dir is not None else dest.parent / "review"
     proxies.mkdir(parents=True, exist_ok=True)
@@ -261,12 +270,12 @@ def review_clips(
     reviewed: list[dict] = []
     groups = batches(clips, n=REVIEW_BATCH)
     for i, group in enumerate(groups, start=1):
-        print(f"REVIEW {MODEL} batch {i}/{len(groups)} n={len(group)}", flush=True)
+        print(f"REVIEW {use} batch {i}/{len(groups)} n={len(group)}", flush=True)
 
         def _attempt(g: list[dict]) -> list[dict]:
             tries = BATCH_TRIES if len(g) <= 1 else 1
             return run_with_retries(
-                lambda g=g: review_batch(client, g, proxies, prompt=prompt),
+                lambda g=g: review_batch(client, g, proxies, prompt=prompt, model=use),
                 tries=tries,
                 sleep_s=RETRY_SLEEP_S,
             )
@@ -274,7 +283,7 @@ def review_clips(
         reviewed.extend(review_ladder_rows(group, _attempt))
     partial = len(reviewed) < len(clips)
     payload = {
-        "model": MODEL,
+        "model": use,
         "partial": partial,
         "n_input": len(clips),
         "n_reviewed": len(reviewed),

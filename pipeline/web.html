@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Highlight Studio</title>
+    <style>
+      :root {
+        --javelin-orange: #ef5908;
+        --javelin-orange-hover: #d94e05;
+        --javelin-navy: #0e324f;
+        --semantic-success: #159b59;
+        --neutral-50: #f8f8f8;
+        --neutral-100: #e2e7e9;
+        --neutral-200: #dde0e3;
+        --neutral-600: #8a8f98;
+        --neutral-800: #5b6068;
+        --neutral-900: #14161a;
+        --white: #ffffff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: var(--neutral-50);
+        color: var(--neutral-800);
+      }
+      .navy-rail { width: 10px; background: var(--javelin-navy); flex-shrink: 0; }
+      .app { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+      .top-navbar {
+        background: var(--neutral-100);
+        border-bottom: 1px solid var(--neutral-200);
+        padding: 14px 28px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .page-crumb { font-size: 20px; font-weight: 600; color: var(--neutral-900); }
+      .badge-argon {
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 11px;
+        border-radius: 999px;
+        background: var(--javelin-navy);
+        color: var(--neutral-50);
+      }
+      .main { width: min(1100px, 100%); margin: 0 auto; padding: 20px 28px 36px; display: flex; flex-direction: column; gap: 18px; }
+      .hero {
+        position: relative;
+        height: 168px;
+        border-radius: 24px;
+        border: 1px solid var(--neutral-200);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background:
+          linear-gradient(180deg, rgba(14, 50, 79, 0.45), rgba(20, 22, 26, 0.72)),
+          linear-gradient(135deg, #4b3421 0%, #0e324f 55%, #1d3549 100%);
+      }
+      #pick {
+        appearance: none;
+        background: var(--neutral-50);
+        color: var(--neutral-800);
+        border: 2px solid #1a79f6;
+        border-radius: 999px;
+        padding: 8px 22px 8px 10px;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #pick:disabled { opacity: 0.55; cursor: default; }
+      .plus {
+        width: 28px; height: 28px; border-radius: 50%;
+        background: #1a79f6; color: #fff;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-weight: 700;
+      }
+      .hero-meta {
+        background: rgba(20, 22, 26, 0.72);
+        color: var(--neutral-50);
+        font-size: 12.5px;
+        padding: 4px 14px;
+        border-radius: 999px;
+      }
+      #file { display: none; }
+      .panel {
+        background: var(--white);
+        border: 1px solid var(--neutral-200);
+        border-radius: 20px;
+        padding: 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      h2 { margin: 0; font-size: 18px; color: var(--neutral-900); }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+      @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } .main { padding: 16px; } }
+      label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--neutral-900); }
+      .check { flex-direction: row; align-items: center; gap: 8px; }
+      input[type="text"], input[type="number"], select {
+        width: 100%;
+        background: var(--neutral-100);
+        border: 1.5px solid var(--semantic-success);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font: inherit;
+        color: var(--neutral-900);
+      }
+      .note { margin: 0; color: var(--neutral-600); font-size: 13px; font-weight: 500; }
+      #out { min-height: 1.5rem; display: flex; flex-direction: column; gap: 12px; }
+      #out video { width: 100%; max-height: 70vh; background: #000; border-radius: 12px; }
+      .clip-label { font-size: 13px; font-weight: 600; color: var(--neutral-900); }
+    </style>
+  </head>
+  <body>
+    <div class="navy-rail"></div>
+    <div class="app">
+      <header class="top-navbar">
+        <div class="page-crumb">Highlight Studio</div>
+        <span class="badge-argon">Gemini</span>
+      </header>
+      <main class="main">
+        <section class="hero">
+          <button type="button" id="pick"><span class="plus">+</span> Select MP4</button>
+          <div class="hero-meta" id="fileMeta">Up to 10 GB</div>
+        </section>
+        <section class="panel">
+          <h2>Job</h2>
+          <div class="grid">
+            <label>Scan model
+              <select id="scanModel">
+                <option value="gemini-2.5-flash" selected>gemini-2.5-flash</option>
+                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                <option value="gemini-3.8-flash">gemini-3.8-flash</option>
+                <option value="gemini-4-argon">gemini-4-argon</option>
+              </select>
+            </label>
+            <label>Custom scan model
+              <input id="scanCustom" type="text" placeholder="Leave blank to use the list" />
+            </label>
+            <label>Review model
+              <select id="reviewModel">
+                <option value="gemini-3.8-flash" selected>gemini-3.8-flash</option>
+                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                <option value="gemini-4-argon">gemini-4-argon</option>
+              </select>
+            </label>
+            <label>Custom review model
+              <input id="reviewCustom" type="text" placeholder="Leave blank to use the list" />
+            </label>
+            <label class="check"><input id="argonOn" type="checkbox" checked /> TikTok polish</label>
+            <label>Polish model
+              <select id="argonModel">
+                <option value="gemini-4-argon" selected>gemini-4-argon</option>
+                <option value="gemini-3.8-flash">gemini-3.8-flash</option>
+              </select>
+            </label>
+            <label>Custom polish model
+              <input id="argonCustom" type="text" placeholder="Leave blank to use the list" />
+            </label>
+            <label>Sport
+              <select id="sport">
+                <option value="volleyball" selected>Volleyball</option>
+                <option value="basketball">Basketball</option>
+                <option value="auto">Auto</option>
+              </select>
+            </label>
+            <label>Thinking
+              <select id="thinking">
+                <option value="LOW">Low</option>
+                <option value="MEDIUM" selected>Medium</option>
+                <option value="HIGH">High</option>
+              </select>
+            </label>
+            <label>Frame
+              <select id="layout">
+                <option value="blurred-bg" selected>Full frame</option>
+                <option value="smart-crop">Punch on the hit</option>
+              </select>
+            </label>
+            <label>Target seconds
+              <input id="targetS" type="number" min="15" max="180" value="60" />
+            </label>
+            <label class="check"><input id="captions" type="checkbox" /> Title on the hit</label>
+          </div>
+          <p class="note">The vertical cut is 60 seconds at normal speed. The picture punches in on the play. A 2-hour file takes about 15 to 40 minutes after the upload ends.</p>
+        </section>
+        <section class="panel">
+          <h2>Output</h2>
+          <div id="out"></div>
+        </section>
+      </main>
+    </div>
+    <input id="file" type="file" accept=".mp4,video/mp4" />
+    <script>
+      const MAX = 10 * 1024 * 1024 * 1024;
+      const pick = document.getElementById("pick");
+      const fileInput = document.getElementById("file");
+      const out = document.getElementById("out");
+      const fileMeta = document.getElementById("fileMeta");
+      const argonOn = document.getElementById("argonOn");
+      let pollTimer = 0;
+      let workStarted = 0;
+
+      function modelValue(selectId, customId) {
+        const custom = document.getElementById(customId).value.trim();
+        return custom || document.getElementById(selectId).value;
+      }
+
+      function setPolishEnabled(on) {
+        ["argonModel", "argonCustom", "sport", "thinking", "layout", "targetS", "captions"].forEach((id) => {
+          document.getElementById(id).disabled = !on;
+        });
+      }
+
+      function setOutText(text) {
+        out.replaceChildren();
+        out.textContent = text;
+      }
+
+      function bytesLabel(n) {
+        const gb = 1024 * 1024 * 1024;
+        const mb = 1024 * 1024;
+        if (n >= gb) return (n / gb).toFixed(1) + " GB";
+        if (n >= mb) return (n / mb).toFixed(1) + " MB";
+        return Math.round(n / 1024) + " KB";
+      }
+
+      function addVideo(title, src) {
+        const label = document.createElement("div");
+        label.className = "clip-label";
+        label.textContent = title;
+        const video = document.createElement("video");
+        video.controls = true;
+        video.src = src + "?t=" + Date.now();
+        out.append(label, video);
+      }
+
+      function showOutputs(data) {
+        const detail = data.detail || "";
+        out.replaceChildren();
+        if (detail) {
+          const note = document.createElement("div");
+          note.textContent = detail;
+          out.append(note);
+        }
+        if (data.reel) addVideo("16:9 reel", "/reel");
+        if (data.tiktok) addVideo("9:16 TikTok", "/tiktok");
+      }
+
+      function stopPoll() {
+        if (pollTimer) {
+          clearTimeout(pollTimer);
+          pollTimer = 0;
+        }
+      }
+
+      async function poll() {
+        let data;
+        try {
+          const res = await fetch("/status");
+          data = await res.json();
+        } catch (err) {
+          setOutText("The job failed.");
+          pick.disabled = false;
+          return;
+        }
+        if (data.status === "done") {
+          pick.disabled = false;
+          showOutputs(data);
+          return;
+        }
+        if (data.status === "error") {
+          pick.disabled = false;
+          setOutText(data.detail || "The job failed.");
+          return;
+        }
+        const min = Math.max(0, Math.floor((Date.now() - workStarted) / 60000));
+        const line = data.detail && data.detail !== "Working" ? data.detail : "Working";
+        setOutText(min + " min · " + line);
+        pollTimer = setTimeout(poll, 2000);
+      }
+
+      function sendFile(file) {
+        pick.disabled = true;
+        stopPoll();
+        setOutText("Upload 0 / " + bytesLabel(file.size));
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/upload");
+        xhr.setRequestHeader("Content-Type", "video/mp4");
+        xhr.setRequestHeader("X-Filename", file.name);
+        xhr.setRequestHeader("X-Scan-Model", modelValue("scanModel", "scanCustom"));
+        xhr.setRequestHeader("X-Review-Model", modelValue("reviewModel", "reviewCustom"));
+        xhr.setRequestHeader("X-Argon", argonOn.checked ? "1" : "0");
+        xhr.setRequestHeader("X-Argon-Model", modelValue("argonModel", "argonCustom"));
+        xhr.setRequestHeader("X-Sport", document.getElementById("sport").value);
+        xhr.setRequestHeader("X-Thinking", document.getElementById("thinking").value);
+        xhr.setRequestHeader("X-Layout", document.getElementById("layout").value);
+        xhr.setRequestHeader("X-Captions", document.getElementById("captions").checked ? "1" : "0");
+        xhr.setRequestHeader("X-Hook", "0");
+        xhr.setRequestHeader("X-Target-S", document.getElementById("targetS").value || "60");
+        xhr.upload.onprogress = (ev) => {
+          if (!ev.lengthComputable) return;
+          setOutText("Upload " + bytesLabel(ev.loaded) + " / " + bytesLabel(ev.total));
+        };
+        xhr.onerror = () => {
+          pick.disabled = false;
+          setOutText("The job failed.");
+        };
+        xhr.onload = () => {
+          let data = {};
+          try { data = JSON.parse(xhr.responseText || "{}"); } catch (err) { data = {}; }
+          if (xhr.status < 200 || xhr.status >= 300) {
+            pick.disabled = false;
+            setOutText(data.detail || "The job failed.");
+            return;
+          }
+          workStarted = Date.now();
+          setOutText("0 min · Working");
+          poll();
+        };
+        xhr.send(file);
+      }
+
+      argonOn.addEventListener("change", () => setPolishEnabled(argonOn.checked));
+      setPolishEnabled(argonOn.checked);
+      pick.addEventListener("click", () => fileInput.click());
+      fileInput.addEventListener("change", () => {
+        const file = fileInput.files[0];
+        fileInput.value = "";
+        if (!file) return;
+        fileMeta.textContent = file.name + " · " + bytesLabel(file.size);
+        if (!file.name.toLowerCase().endsWith(".mp4")) {
+          setOutText("Use an MP4 file.");
+          return;
+        }
+        if (file.size > MAX) {
+          setOutText("File is larger than 10 GB.");
+          return;
+        }
+        sendFile(file);
+      });
+    </script>
+  </body>
+</html>

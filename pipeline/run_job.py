@@ -16,7 +16,7 @@ from clip_window import (
     one_cool_caps,
     review_window,
 )
-from gemini_defaults import REVIEW_MODEL, SCAN_MODEL
+from gemini_defaults import ARGON_MODEL, REVIEW_MODEL, SCAN_MODEL
 from review_clips import LONG_PROMPT, review_clips
 from scan_io import load_all_keeps, merge_windows, slug
 from scan_local import scan_local
@@ -232,7 +232,19 @@ def run_job(
     skip_review: bool = False,
     from_gen: int | None = None,
     extend_cool: bool = False,
+    scan_model: str | None = None,
+    review_model: str | None = None,
+    argon: bool = False,
+    argon_model: str | None = None,
+    sport: str = "volleyball",
+    thinking: str = "MEDIUM",
+    layout: str = "blurred-bg",
+    captions: bool = True,
+    hook: bool = True,
+    target_s: float = 60.0,
 ) -> int:
+    scan_name = scan_model or SCAN_MODEL
+    review_name = review_model or REVIEW_MODEL
     src, from_inbox = resolve_source(source)
     gens = ensure_gens_dir(ROOT)
     n = gen_n if gen_n is not None else next_gen_n(ROOT)
@@ -286,6 +298,7 @@ def run_job(
                 dest / "review_long.json",
                 proxy_dir=dest / "review",
                 prompt=LONG_PROMPT,
+                model=review_name,
             )
             candidates[idx] = merge_trims([cool], review_payload["clips"])[0]
             keep_all = True
@@ -310,6 +323,7 @@ def run_job(
             job_scan,
             video_end=int(round(video_end)),
             proxy_dir=dest / "windows",
+            model=scan_name,
         )
         used_scan = job_scan
         rows = load_all_keeps(used_scan)
@@ -337,6 +351,7 @@ def run_job(
             candidates,
             dest / "review.json",
             proxy_dir=dest / "review",
+            model=review_name,
         )
         if keep_all:
             picker = "trim"
@@ -371,8 +386,10 @@ def run_job(
     meta = {
         "gen": n,
         "aspect": "16:9",
-        "scan_model": SCAN_MODEL,
-        "review_model": REVIEW_MODEL,
+        "scan_model": scan_name,
+        "review_model": review_name,
+        "argon": bool(argon),
+        "argon_model": (argon_model or ARGON_MODEL) if argon else None,
         "source": str(src),
         "scan_dir": str(used_scan),
         "scan_partial": bool(scan_result.get("partial")),
@@ -387,6 +404,25 @@ def run_job(
     }
     (dest / "keeps.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     print(f"{reel} {secs:.1f}s clips={len(picked)}", flush=True)
+    if argon:
+        from argon import polish_reel
+
+        tiktok = dest / "tiktok.mp4"
+        polish_reel(
+            reel,
+            tiktok,
+            model=argon_model or ARGON_MODEL,
+            sport=sport,
+            thinking=thinking,
+            layout=layout,
+            captions=captions,
+            hook=hook,
+            target_s=target_s,
+            proxy_dir=dest / "argon",
+        )
+        meta["tiktok"] = str(tiktok)
+        meta["seconds_tiktok"] = round(probe_secs(tiktok), 2)
+        (dest / "keeps.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     if from_inbox:
         DONE.mkdir(parents=True, exist_ok=True)
         shutil.move(str(src), str(DONE / src.name))
@@ -402,6 +438,16 @@ def main() -> int:
     parser.add_argument("--skip-review", action="store_true")
     parser.add_argument("--from-gen", type=int, default=None)
     parser.add_argument("--extend-cool", action="store_true")
+    parser.add_argument("--scan-model", default=None)
+    parser.add_argument("--review-model", default=None)
+    parser.add_argument("--argon", action="store_true")
+    parser.add_argument("--argon-model", default=None)
+    parser.add_argument("--sport", default="volleyball")
+    parser.add_argument("--thinking", default="MEDIUM")
+    parser.add_argument("--layout", default="blurred-bg")
+    parser.add_argument("--no-captions", action="store_true")
+    parser.add_argument("--no-hook", action="store_true")
+    parser.add_argument("--target-s", type=float, default=60.0)
     args = parser.parse_args()
     scan_dir = args.scan_dir
     if scan_dir is not None and not scan_dir.is_absolute():
@@ -415,11 +461,24 @@ def main() -> int:
             skip_review=args.skip_review,
             from_gen=args.from_gen,
             extend_cool=args.extend_cool,
+            scan_model=args.scan_model,
+            review_model=args.review_model,
+            argon=args.argon,
+            argon_model=args.argon_model,
+            sport=args.sport,
+            thinking=args.thinking,
+            layout=args.layout,
+            captions=not args.no_captions,
+            hook=not args.no_hook,
+            target_s=args.target_s,
         )
     except FileNotFoundError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     except TimeoutError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
