@@ -1,0 +1,119 @@
+{
+  "video_s": 123.64,
+  "target_s": 60.0,
+  "spans": [
+    [
+      0,
+      15
+    ],
+    [
+      15,
+      28
+    ],
+    [
+      28,
+      40
+    ],
+    [
+      40,
+      52
+    ],
+    [
+      52,
+      68
+    ],
+    [
+      68,
+      81.5
+    ],
+    [
+      81.5,
+      93.5
+    ],
+    [
+      93.5,
+      108.5
+    ],
+    [
+      108.5,
+      123.64
+    ]
+  ],
+  "decisions": {
+    "shots": [
+      {
+        "index": 0,
+        "keep": true,
+        "in_s": 8.3,
+        "out_s": 14.8,
+        "center_x": 0.65,
+        "energy": 8
+      },
+      {
+        "index": 1,
+        "keep": false,
+        "in_s": 15.0,
+        "out_s": 15.0,
+        "center_x": 0.5,
+        "energy": 3
+      },
+      {
+        "index": 2,
+        "keep": false,
+        "in_s": 28.0,
+        "out_s": 28.0,
+        "center_x": 0.5,
+        "energy": 4
+      },
+      {
+        "index": 3,
+        "keep": true,
+        "in_s": 44.6,
+        "out_s": 51.4,
+        "center_x": 0.75,
+        "energy": 8
+      },
+      {
+        "index": 4,
+        "keep": true,
+        "in_s": 56.3,
+        "out_s": 68.0,
+        "center_x": 0.35,
+        "energy": 7
+      },
+      {
+        "index": 5,
+        "keep": true,
+        "in_s": 75.0,
+        "out_s": 81.2,
+        "center_x": 0.5,
+        "energy": 6
+      },
+      {
+        "index": 6,
+        "keep": true,
+        "in_s": 84.0,
+        "out_s": 93.5,
+        "center_x": 0.72,
+        "energy": 9
+      },
+      {
+        "index": 7,
+        "keep": true,
+        "in_s": 100.0,
+        "out_s": 106.8,
+        "center_x": 0.25,
+        "energy": 7
+      },
+      {
+        "index": 8,
+        "keep": true,
+        "in_s": 111.0,
+        "out_s": 123.5,
+        "center_x": 0.68,
+        "energy": 9
+      }
+    ]
+  },
+  "prompt_sha256": "d5614ecd4e2dfd75a4c659fcc4f14ee091fbaa3c00af6024ee3a9afd005895b1"
+}

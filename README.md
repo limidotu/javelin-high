@@ -11,6 +11,7 @@ Turn a gym volleyball MP4 into a 16:9 highlight reel. A person watches the reel,
 5. `gemini-3.8-flash` scores clips in batches of 10 with high thinking. It sets a trim near 15 s (12 to 18 s).
 6. One high-score rally can run to 40 s. The model watches that clip alone.
 7. FFmpeg concatenates 8 to 10 clips in time order.
+8. Argon makes a 60-second portrait cut with the tested athlete showcase preset.
 
 One command runs the full file. A dead 10-minute window is split, then scanned. A 429 streak still stops the scan.
 
@@ -33,7 +34,7 @@ Do not put API keys in git. A local `.env` file stays off git.
 
 1. Drop one complete MP4 into `pipeline/inbox`.
 2. In `pipeline`, run `python run_job.py`. The job creates `pipeline/generations` if that folder is missing.
-3. Watch `pipeline/generations/gen_N/reel.mp4`. Post it or reject it.
+3. Watch `reel.mp4` and `tiktok.mp4` in the new generation. Post them or reject them.
 
 A 2-hour file takes about 15-40 minutes. Time depends on scan coverage and Vertex quota.
 
@@ -57,6 +58,35 @@ Extend the longest high-score clip to 40 s:
 python run_job.py --from-gen 8 --extend-cool --gen 10
 ```
 
+## Vertical polish
+
+The page and command line enable TikTok polish by default. Use `--no-argon` to build only the landscape reel.
+
+The default uses the winning **Players' best light** prompt from the ten-prompt comparison.
+It favors an active opening, readable athletic skill, complete plays, and a varied pace.
+Argon chooses the cuts and crop positions. The renderer uses normal speed, original sound, and no titles.
+
+The preset uses `gemini-4-argon`, HIGH thinking, high media resolution, 8 fps input sampling, and temperature 0.7.
+Each reel supplies its own duration and shot boundaries. The default target is 60 seconds.
+The prompt template is `pipeline/prompts/players_best_light.txt`.
+
+The final polish uploads the original landscape reel to a private Cloud Storage bucket in the configured Vertex project.
+It does not use the old compressed proxy. The first run creates `<VERTEX_PROJECT>-argon-reels` in `us-central1`.
+The account must have permission to create the bucket and read and write its objects.
+To use an existing bucket in that project, set `ARGON_VIDEO_BUCKET` to its name without `gs://`.
+Uploads use the reel's SHA-256 hash, so the same bytes reuse the same object. Cached uploads remain in that bucket.
+
+The pipeline rejects missing shots, invalid crops, out-of-bounds cuts, and plans that miss the target duration.
+Argon gets up to three attempts to correct an invalid plan. The pipeline does not fill missing seconds with dead time.
+It publishes `tiktok.mp4` only after the render passes its duration and audio checks.
+If polish fails, the page still offers the landscape reel with the error.
+
+Each generation saves the exact prompt in `tiktok_argon_prompt.txt`, the attempts in `tiktok_argon_attempts.json`, and the accepted plan in `tiktok_argon.json`.
+The accepted plan records the prompt version, model, thinking level, video sampling rate, temperature, and original input hash.
+
+This preset reproduces the tested workflow. Model choices still depend on the footage.
+The fixed crop has the same framing limits as the selected reference video.
+
 ## Layout
 
 - `pipeline/run_job.py` — drop-folder job.
@@ -69,7 +99,7 @@ python run_job.py --from-gen 8 --extend-cool --gen 10
 
 ```
 cd pipeline
-python -m unittest test_pipeline
+python -m unittest discover -p "test_*.py"
 ```
 
 ## What git ignores

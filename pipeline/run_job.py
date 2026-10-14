@@ -16,7 +16,7 @@ from clip_window import (
     one_cool_caps,
     review_window,
 )
-from gemini_defaults import ARGON_MODEL, REVIEW_MODEL, SCAN_MODEL
+from gemini_defaults import ARGON_MODEL, ARGON_THINKING, REVIEW_MODEL, SCAN_MODEL
 from review_clips import LONG_PROMPT, review_clips
 from scan_io import load_all_keeps, merge_windows, slug
 from scan_local import scan_local
@@ -234,10 +234,10 @@ def run_job(
     extend_cool: bool = False,
     scan_model: str | None = None,
     review_model: str | None = None,
-    argon: bool = False,
+    argon: bool = True,
     argon_model: str | None = None,
     sport: str = "volleyball",
-    thinking: str = "MEDIUM",
+    thinking: str = ARGON_THINKING,
     layout: str = "blurred-bg",
     captions: bool = True,
     hook: bool = True,
@@ -440,10 +440,10 @@ def main() -> int:
     parser.add_argument("--extend-cool", action="store_true")
     parser.add_argument("--scan-model", default=None)
     parser.add_argument("--review-model", default=None)
-    parser.add_argument("--argon", action="store_true")
+    parser.add_argument("--argon", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--argon-model", default=None)
     parser.add_argument("--sport", default="volleyball")
-    parser.add_argument("--thinking", default="MEDIUM")
+    parser.add_argument("--thinking", default=ARGON_THINKING)
     parser.add_argument("--layout", default="blurred-bg")
     parser.add_argument("--no-captions", action="store_true")
     parser.add_argument("--no-hook", action="store_true")

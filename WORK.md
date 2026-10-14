@@ -1,21 +1,26 @@
 # Work
 
-## Status
+## Current preset
 
-The 16:9 reel is unchanged. `reel.mp4` is 123.64 seconds at 1280x720. `tiktok_v4.mp4` is the slow cut. Leave it.
+The page and `run_job.py` use Players' best light by default.
+Argon receives the original reel with 8 fps sampling, HIGH thinking, and temperature 0.7.
+The prompt uses each reel's duration, shot boundaries, sport, and target length.
+The normal-speed renderer matches the selected reference video.
 
-## Target
+## Checks
 
-The vertical cut is 60 seconds at normal speed. Argon chooses each in and out. The picture punches in on the play. There are no titles.
+- The reference reel generates the exact winning prompt.
+- The saved winning decisions retain every interval and crop position.
+- Invalid plans return to Argon before rendering, with a limit of three attempts.
+- A failed render cannot replace a complete video.
+- A fresh live run produced seven plays on its first attempt.
+- The live output is 60 seconds at 1080x1920 and passed the picture and audio checks.
 
-## This change
-
-- Watch `C:\Users\dlash\Downloads\tiktok_v5.mp4`. The file is 60.00 seconds at 1080x1920.
-- Argon HIGH used the existing 8 fps proxy. The windows already sum to 60. The fitter did not change them.
-- Screen lengths in seconds: 5.2, 4.4, 6.3, 4.5, 11.8, 4.4, 7.0, 6.0, 10.4.
-- `polish_locked.py` has `RENDER_ONLY = True`. A new Argon call needs that flag off.
-- `reel.mp4`, `tiktok.mp4`, and `tiktok_v4.mp4` stay in place.
+The live sample and its request records are in `pipeline/generations/gen_14/preset_verification/`.
+The earlier ten-prompt comparison stays in `pipeline/generations/gen_14/prompt_trials/`.
+These local media folders stay outside git.
 
 ## Limits
 
-The source is 720p, so the punch-in is soft. A blur bar stays under the picture. A full-height crop hides the sides of this court. Three plays are 4.4 to 4.5 seconds. The Title checkbox does not draw titles on this cut.
+Model decisions depend on the footage. The renderer still uses one fixed crop per play.
+The `polish_locked.py` script remains a manual rerender tool for older output.

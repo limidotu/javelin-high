@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import subprocess
 import tempfile
@@ -13,7 +14,11 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
-from gemini_defaults import ARGON_MODEL, ARGON_THINKING, VERTEX_LOCATION, VERTEX_PROJECT
+from gemini_defaults import (
+    ARGON_MAX_OUTPUT_TOKENS, ARGON_MODEL, ARGON_PROMPT_VERSION, ARGON_TEMPERATURE,
+    ARGON_THINKING, ARGON_VIDEO_FPS, VERTEX_LOCATION, VERTEX_PROJECT,
+)
+from argon_video import upload_reel
 from media import INLINE_MAX_BYTES, ffmpeg_bin
 
 HTTP_TIMEOUT_MS = 600_000
@@ -732,28 +737,58 @@ PACE_SCHEMA = {
 
 
 def build_pace_prompt(sport: str, video_s: float, spans: list[tuple[float, float]], target_s: float) -> str:
-    guide = SPORT_GUIDE.get(sport, SPORT_GUIDE["auto"])
-    lines = [f"{index} {start:.2f} {end:.2f}" for index, (start, end) in enumerate(spans)]
-    return (
-        "You are the editor of a 60 second vertical sports reel. "
-        f"This file is the locked 16:9 cut. It is {video_s:.1f} seconds. "
-        f"Your cut plays at normal speed and lasts {target_s:.0f} seconds. "
-        "You cannot slow a play. You cannot speed a play. "
-        "The sum of out_s minus in_s on the plays you keep must be 59 to 61 seconds.\n"
-        f"{guide}\n"
-        "Shots, one per line, as index start end:\n"
-        + "\n".join(lines)
-        + "\nFor every shot return index, keep, in_s, out_s, center_x, and energy.\n"
-        "keep is false only when the play is dead and would make the reel boring.\n"
-        "in_s is the frame where the point becomes worth watching. Cut the walk and the waiting.\n"
-        "out_s is just after the ball is down. Keep the result. Cut the next walk.\n"
-        "A routine finish can be 3.5 to 6 seconds. A rally that is actually good can be 8 to 14 seconds.\n"
-        "Vary the length. Do not make every play the same length.\n"
-        "Keep the shot order. Do not move a later play in front.\n"
-        "center_x is 0 at the left edge and 1 at the right edge, on the ball at the finish.\n"
-        "energy is 1 to 10. A routine touch is 4. A dive, a stuff, or a long rally is 8 or more.\n"
-        "No titles. No slow motion. JSON only."
-    )
+    approaches = {
+        "volleyball": "Make a tasteful athlete showcase. Select controlled sets, purposeful movement, difficult saves, strong attacks, and well-timed blocks. Show the player preparing and executing, not merely the ball landing. Avoid foreground obstructions, accidental points, ordinary errors, and misleading success claims. Show both sides' good play when present. Give each selected athlete enough screen time and a stable composition to appreciate the skill. Keep the edit fun and honest, without exaggerated scores.",
+        "basketball": "Make a tasteful athlete showcase. Select controlled passes, purposeful movement, difficult finishes, strong shots, steals, and well-timed blocks. Show the player preparing and executing, not merely the ball reaching the basket. Avoid foreground obstructions, accidental scores, ordinary errors, and misleading success claims. Show both sides' good play when present. Give each selected athlete enough screen time and a stable composition to appreciate the skill. Keep the edit fun and honest, without exaggerated scores.",
+        "auto": "Detect the sport in the attached footage. Make a tasteful athlete showcase. Select controlled setups, purposeful movement, difficult saves or finishes, strong attacks, and well-timed defensive plays. Show the player preparing and executing, not merely the result. Avoid foreground obstructions, accidental points, ordinary errors, and misleading success claims. Show both sides' good play when present. Give each selected athlete enough screen time and a stable composition to appreciate the skill. Keep the edit fun and honest, without exaggerated scores.",
+    }
+    template = (Path(__file__).parent / "prompts" / "players_best_light.txt").read_text(encoding="utf-8")
+    return template.format(
+        target_s=target_s, source_duration_s=video_s,
+        sport_name=sport if sport != "auto" else "sports",
+        shot_bounds="\n".join(f"{index}: {start:.3f} to {end:.3f}" for index, (start, end) in enumerate(spans)),
+        editorial_approach=approaches[sport],
+    ).rstrip("\n")
+
+
+class InvalidArgonPlan(ValueError):
+    """Argon's timing cannot be rendered without changing its decisions."""
+
+
+def validate_pace_plan(edl: dict, spans: list[tuple[float, float]], target_s: float) -> None:
+    """Reject incomplete plans, invalid crops, and cuts that need padding."""
+    rows = edl.get("shots") if isinstance(edl, dict) else None
+    if not isinstance(rows, list) or len(rows) != len(spans):
+        raise InvalidArgonPlan("Return exactly one entry for every source shot.")
+    seen = set()
+    total = 0.0
+    for row in rows:
+        if not isinstance(row, dict):
+            raise InvalidArgonPlan("Each shot must be a JSON object.")
+        index = row.get("index")
+        if type(index) is not int or index not in range(len(spans)) or index in seen:
+            raise InvalidArgonPlan("Shot indices must be unique and match the supplied source shots.")
+        seen.add(index)
+        if type(row.get("keep")) is not bool:
+            raise InvalidArgonPlan("The keep field must be true or false.")
+        if not row["keep"]:
+            continue
+        values = {}
+        for field in ("in_s", "out_s", "center_x", "energy"):
+            value = row.get(field)
+            if type(value) not in (int, float) or not math.isfinite(value):
+                raise InvalidArgonPlan(f"Shot {index}: {field} must be a finite number.")
+            values[field] = float(value)
+        start, end = spans[index]
+        if not start <= values["in_s"] < values["out_s"] <= end:
+            raise InvalidArgonPlan(f"Shot {index}: keep the interval inside {start:.3f} to {end:.3f} seconds.")
+        if values["out_s"] - values["in_s"] < 0.8:
+            raise InvalidArgonPlan(f"Shot {index}: the kept interval must last at least 0.8 seconds.")
+        if not 0 <= values["center_x"] <= 1 or not 1 <= values["energy"] <= 10:
+            raise InvalidArgonPlan(f"Shot {index}: center_x must be 0 to 1 and energy must be 1 to 10.")
+        total += values["out_s"] - values["in_s"]
+    if total <= 0 or abs(total - target_s) > 0.05:
+        raise InvalidArgonPlan(f"Kept intervals total {total:.3f} seconds. They must total {target_s:.3f}, within 0.050 seconds.")
 
 
 def fit_pace(spans: list[tuple[float, float]], notes: dict, target_s: float) -> list[dict]:
@@ -775,7 +810,7 @@ def fit_pace(spans: list[tuple[float, float]], notes: dict, target_s: float) -> 
             "impact_s": inn,
             "energy": energy,
             "score": energy,
-            "center_x": min(1.0, max(0.0, float(note.get("center_x", 0.5) or 0.5))),
+            "center_x": min(1.0, max(0.0, float(note.get("center_x", 0.5)))),
             "label": "",
         })
     if not shots:
@@ -899,9 +934,10 @@ def build_lock_prompt(sport: str, video_s: float, spans: list[tuple[float, float
     )
 
 
-def ask_argon(proxy: Path, prompt: str, schema: dict, model: str, thinking: str, timeout_ms: int = HTTP_TIMEOUT_MS) -> dict:
+def ask_argon(video_uri: str, prompt: str, schema: dict, model: str, thinking: str, timeout_ms: int = HTTP_TIMEOUT_MS) -> dict:
     client = genai.Client(vertexai=True, project=VERTEX_PROJECT, location=VERTEX_LOCATION)
-    video = types.Part.from_bytes(data=proxy.read_bytes(), mime_type="video/mp4")
+    video = types.Part.from_uri(file_uri=video_uri, mime_type="video/mp4")
+    video.video_metadata = types.VideoMetadata(fps=ARGON_VIDEO_FPS)
     print(f"ARGON call {model} thinking={thinking}", flush=True)
 
     def _run():
@@ -914,7 +950,8 @@ def ask_argon(proxy: Path, prompt: str, schema: dict, model: str, thinking: str,
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                 thinking_config=types.ThinkingConfig(thinking_level=thinking),
                 media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
-                max_output_tokens=65536,
+                temperature=ARGON_TEMPERATURE,
+                max_output_tokens=ARGON_MAX_OUTPUT_TOKENS,
                 http_options=types.HttpOptions(timeout=timeout_ms),
             ),
         )
@@ -932,7 +969,7 @@ def ask_argon(proxy: Path, prompt: str, schema: dict, model: str, thinking: str,
     print(f"ARGON ok {round(time.time() - t0, 1)}s", flush=True)
     text = response.text or ""
     if not text.strip():
-        raise RuntimeError("Argon returned no JSON")
+        raise InvalidArgonPlan("Argon returned no JSON.")
     return json.loads(text)
 
 
@@ -1141,11 +1178,13 @@ def polish_reel(
         raise ValueError("Sport must be volleyball, basketball, or auto.")
     if layout not in LAYOUTS:
         raise ValueError("Layout must be smart-crop or blurred-bg.")
-    if target_s < 15 or target_s > 180:
+    if not math.isfinite(target_s) or target_s < 15 or target_s > 180:
         raise ValueError("Target length must be 15 to 180 seconds.")
     meta = probe_video(reel)
     if meta["duration"] <= 0:
         raise RuntimeError("The reel has no duration.")
+    if meta["duration"] < target_s:
+        raise ValueError(f"The reel is {meta['duration']:.2f} seconds. Use a target no longer than the reel.")
     if spans is None and keeps is not None and Path(keeps).is_file():
         spans = spans_from_keeps(keeps)
     if spans is None and (reel.parent / "keeps.json").is_file():
@@ -1153,21 +1192,47 @@ def polish_reel(
     if spans is None:
         spans = shot_spans(reel, meta["duration"])
     spans = fit_spans(list(spans), meta["duration"])
+    previous_end = 0.0
+    for start, end in spans:
+        if not all(math.isfinite(value) for value in (start, end)) or not previous_end <= start < end <= meta["duration"]:
+            raise ValueError("The shot boundaries must be ordered and stay inside the reel.")
+        previous_end = end
+    if sum(end - start for start, end in spans) < target_s:
+        raise ValueError("The source shots are shorter than the target. Use a shorter target.")
     print(f"ARGON pace shots={len(spans)} target={target_s:.2f}s", flush=True)
-    proxies = proxy_dir if proxy_dir is not None else dest.parent / "argon"
-    proxy = proxies / "reel_proxy.mp4"
-    if proxy.is_file() and proxy.stat().st_size <= INLINE_MAX_BYTES:
-        print(f"ARGON proxy reuse bytes={proxy.stat().st_size}", flush=True)
-    else:
-        proxy = make_argon_proxy(reel, proxy)
-    edl = ask_argon(
-        proxy,
-        build_pace_prompt(sport, meta["duration"], spans, target_s),
-        PACE_SCHEMA,
-        use,
-        level,
-        timeout_ms=900_000,
-    )
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    source_input = upload_reel(reel)
+    base_prompt = build_pace_prompt(sport, meta["duration"], spans, target_s)
+    dest.with_name(dest.stem + "_argon_prompt.txt").write_text(base_prompt, encoding="utf-8")
+    attempts = []
+    correction = ""
+    for attempt in range(1, 4):
+        entry = {"attempt": attempt}
+        attempts.append(entry)
+        try:
+            edl = ask_argon(
+                source_input["video_uri"], base_prompt + correction, PACE_SCHEMA, use, level,
+                timeout_ms=900_000,
+            )
+            entry["decisions"] = edl
+            validate_pace_plan(edl, spans, target_s)
+        except (InvalidArgonPlan, json.JSONDecodeError) as exc:
+            entry["error"] = str(exc)
+            print(f"ARGON retry {attempt}/3: {exc}", flush=True)
+            correction = (
+                f"\nYour previous response failed the timing check: {exc}\n"
+                "Return a complete corrected plan. Preserve readable action and outcomes. "
+                "Do not rely on the renderer to pad or trim the plan.\n"
+                + json.dumps(entry.get("decisions", {}))
+            )
+            if attempt == 3:
+                raise InvalidArgonPlan(f"Argon could not return a valid plan after 3 attempts: {exc}") from exc
+        else:
+            break
+        finally:
+            dest.with_name(dest.stem + "_argon_attempts.json").write_text(
+                json.dumps(attempts, indent=2), encoding="utf-8",
+            )
     shots = fit_pace(spans, notes_by_index(edl, len(spans)), target_s)
     for shot in shots:
         print(
@@ -1180,8 +1245,16 @@ def polish_reel(
     edl["target_s"] = target_s
     edl["hook"] = bool(hook)
     edl["pace"] = True
+    edl["prompt_version"] = ARGON_PROMPT_VERSION
+    edl["video_fps"] = ARGON_VIDEO_FPS
+    edl["temperature"] = ARGON_TEMPERATURE
+    edl["source_input"] = source_input
+    edl["attempt_count"] = len(attempts)
     note_path = dest.with_name(dest.stem + "_argon.json")
     note_path.parent.mkdir(parents=True, exist_ok=True)
     note_path.write_text(json.dumps(edl, indent=2), encoding="utf-8")
-    render_stage(reel, shots, dest, layout=layout, captions=False, target_s=target_s, pace=True)
+    with tempfile.TemporaryDirectory(prefix="argon_publish_", dir=dest.parent) as tmp:
+        ready = Path(tmp) / "tiktok.mp4"
+        render_stage(reel, shots, ready, layout=layout, captions=False, target_s=target_s, pace=True)
+        ready.replace(dest)
     return edl

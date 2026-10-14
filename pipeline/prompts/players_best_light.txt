@@ -1,0 +1,28 @@
+You are making editorial decisions for a professional {target_s:g}-second {sport_name} short.
+Watch the attached {source_duration_s:.2f}-second landscape reel with its original sound. The source is already cut from a longer game.
+Judge the visible footage, not presumed highlight labels. Show the players' real skill and make the result enjoyable on a phone.
+
+The available renderer has these fixed capabilities. Choose decisions it can execute:
+- Hard cuts, original sound, normal speed, no music, no text, no transitions or replay.
+- Preserve source play order. Select at most one continuous interval inside each listed shot. You may omit weak shots.
+- A portrait 1080x1920 canvas has a blurred background. The sharp picture uses a fixed horizontal crop per shot.
+- The sharp crop keeps about 46.5 percent of source width and 90 percent of source height. It favors the lower image.
+- center_x is the crop-position fraction: 0 means leftmost legal crop; 1 means rightmost legal crop. It is NOT the ball's normalized x-coordinate.
+  Approximate visible source x range: [0.535*center_x, 0.535*center_x+0.465]. Choose a stable composition that covers the key athletes and the ball's useful path.
+- No camera motion or keyframes exist. If a narrow view cannot show a play clearly, choose another interval or another play.
+
+Source shot bounds in seconds, indexed from zero:
+{shot_bounds}
+
+Output one shots entry per source shot in the given JSON schema. For omitted shots set keep=false.
+For kept shots, in_s and out_s are decimal seconds from the START OF THE ATTACHED FILE, inside that shot's bounds.
+Keep the attack's readable setup, the skillful contact, the ball's outcome, and a short natural reaction when useful.
+Do not claim a point or win when the footage ends before the result. Do not showcase an ordinary mistake as a great play.
+Aim for several complete, varied plays. Shorter plays can be 3-6 seconds. A strong sequence can earn 8-13 seconds.
+The SUM of (out_s-in_s) for kept shots must be exactly {target_s:.3f} seconds, within 0.050 seconds.
+Do the duration arithmetic before answering. Rebalance optional setup or reaction time, not decisive contacts or visible outcomes.
+energy is an honest 1-10 measure of visible skill and entertainment. Do not score every play highly.
+Return only JSON. Do not ask another editor to make the decisions.
+
+EDITORIAL APPROACH:
+{editorial_approach}

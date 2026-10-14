@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import builtins
+import math
 import threading
 from pathlib import Path
 
-from gemini_defaults import ARGON_MODEL, REVIEW_MODEL, SCAN_MODEL, clean_model
+from gemini_defaults import ARGON_MODEL, ARGON_THINKING, REVIEW_MODEL, SCAN_MODEL, clean_model
 from pick import next_gen_n
 from starlette.applications import Starlette
 from starlette.requests import ClientDisconnect, Request
@@ -79,7 +80,7 @@ def job_options(headers) -> dict:
     sport = (headers.get("x-sport") or "volleyball").strip().lower()
     if sport not in ("auto", "volleyball", "basketball"):
         raise ValueError("Sport must be volleyball, basketball, or auto.")
-    thinking = (headers.get("x-thinking") or "MEDIUM").strip().upper()
+    thinking = (headers.get("x-thinking") or ARGON_THINKING).strip().upper()
     if thinking not in ("LOW", "MEDIUM", "HIGH"):
         raise ValueError("Thinking must be LOW, MEDIUM, or HIGH.")
     layout = (headers.get("x-layout") or "blurred-bg").strip().lower()
@@ -89,7 +90,7 @@ def job_options(headers) -> dict:
         target_s = float(headers.get("x-target-s") or 60)
     except ValueError:
         raise ValueError("Target length must be 15 to 180 seconds.") from None
-    if target_s < 15 or target_s > 180:
+    if not math.isfinite(target_s) or target_s < 15 or target_s > 180:
         raise ValueError("Target length must be 15 to 180 seconds.")
     return {
         "scan_model": clean_model(headers.get("x-scan-model"), SCAN_MODEL),
